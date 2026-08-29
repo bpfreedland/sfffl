@@ -33,20 +33,20 @@ body.bcast{background:var(--deep);color:var(--parch)}
 .wrap{padding:16px 20px;max-width:1500px;margin:0 auto}
 .card{background:#fff;border:1px solid #E0D9CB;border-radius:10px;padding:14px;margin-bottom:14px}
 .bcast .card{background:var(--navy);border:1px solid var(--slate);border-radius:6px}
-h2{font:600 11px/1 var(--disp);letter-spacing:.18em;text-transform:uppercase;
+h2{font:600 14px/1 var(--disp);letter-spacing:.18em;text-transform:uppercase;
   color:var(--gold);margin:0 0 10px}
 .bcast h2{color:var(--gold-lt)}
 /* ---- hero: the pick that just landed ---- */
 .hero{display:grid;grid-template-columns:1fr 300px;gap:14px}
 @media(max-width:820px){.hero{grid-template-columns:1fr}}
-.name{font:700 58px/.95 var(--disp);letter-spacing:-.005em;margin:2px 0 8px;
+.name{font:700 76px/.95 var(--disp);letter-spacing:-.005em;margin:2px 0 8px;
   text-transform:uppercase}
-.meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-  font:500 15px/1 var(--body);color:var(--dim)}
+.meta{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  font:500 19px/1 var(--body);color:var(--dim)}
 .pos{font:700 12px/1 var(--disp);letter-spacing:.1em;color:#fff;padding:4px 8px;border-radius:3px}
-.verdict{font:700 30px/1 var(--disp);letter-spacing:.03em}
+.verdict{font:700 40px/1 var(--disp);letter-spacing:.03em}
 .steal{color:#5FCB98}.reach{color:#E58B72}.market{color:var(--dim)}
-.clockname{font:700 30px/1.05 var(--disp);text-transform:uppercase;color:var(--parch)}
+.clockname{font:700 40px/1.05 var(--disp);text-transform:uppercase;color:var(--parch)}
 .eyebrow{font:600 11px/1 var(--disp);letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
 /* ---- the ribbon ---- */
 .ribwrap{position:relative}
@@ -55,18 +55,18 @@ svg.rib{width:100%;height:230px;display:block}
 .ribpct{font:700 15px/1 var(--disp)}
 .baseline{stroke:var(--gold);stroke-width:1;stroke-dasharray:3 4;opacity:.55}
 /* ---- board ---- */
-.grid{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed}
-.grid th{font:600 10px/1 var(--disp);letter-spacing:.1em;text-transform:uppercase;
+.grid{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed}
+.grid th{font:600 13px/1 var(--disp);letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);padding:6px 3px;border-bottom:1px solid var(--slate);text-align:left}
 .card .grid th{border-bottom-color:#E0D9CB}
-.grid td{border:1px solid #EFEAE0;padding:4px 4px;height:34px;vertical-align:top;
+.grid td{border:1px solid #EFEAE0;padding:6px 5px;height:44px;vertical-align:top;
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .bcast .grid td{border-color:#1B3049}
 .grid td.mine{background:#F4F7F4}
 .bcast .grid td.mine{background:#16304A}
 .grid td.now{outline:2px solid var(--gold);outline-offset:-2px}
 .nm{font-weight:600}
-.sub{color:var(--dim);font-size:10px}
+.sub{color:var(--dim);font-size:13px}
 /* ---- command ---- */
 input[type=text]{width:100%;padding:12px 14px;font:500 17px var(--body);
   border:1px solid #E0D9CB;border-radius:8px;background:var(--parch);color:var(--navy)}
@@ -79,7 +79,7 @@ ul.sug{list-style:none;margin:8px 0 0;padding:0;max-height:280px;overflow:auto}
 ul.sug li{padding:9px 11px;border:1px solid #E0D9CB;border-radius:8px;margin-bottom:6px;
   cursor:pointer;display:flex;gap:9px;align-items:center}
 ul.sug li.on{border-color:var(--navy);background:#EEF2F6}
-.tag{display:inline-block;font-size:12px;padding:3px 9px;border-radius:99px;
+.tag{display:inline-block;font-size:16px;padding:5px 11px;border-radius:99px;
   border:1px solid #E0D9CB;color:var(--dim);margin:0 5px 5px 0}
 .bcast .tag{border-color:var(--slate);color:var(--parch)}
 .tag.tgt{border-color:var(--gold);color:#7A6231;background:#FBF6EA}
@@ -87,7 +87,7 @@ ul.sug li.on{border-color:var(--navy);background:#EEF2F6}
 .gate{max-width:340px;margin:70px auto;text-align:center}
 .fade{animation:f .45s cubic-bezier(.2,.7,.3,1)}
 @keyframes f{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.split{display:grid;grid-template-columns:340px 1fr;gap:14px}
+.split{display:grid;grid-template-columns:400px 1fr;gap:16px}
 .split3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 @media(max-width:980px){.split3{grid-template-columns:1fr}}
 table.lineup,table.counts{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
@@ -102,14 +102,14 @@ td.met{color:#3E8E6E}td.short{color:#B05A44}
 .warn{margin-top:10px;padding:8px 10px;border-left:3px solid #B05A44;
   background:#FBF0EE;color:#8C3A2B;font-size:13px;border-radius:0 4px 4px 0}
 table.odds{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-table.odds td{padding:5px 4px;border-bottom:1px solid var(--slate)}
+table.odds td{padding:8px 5px;font-size:18px;border-bottom:1px solid var(--slate)}
 .bcast table.odds tr.me td{color:var(--gold-lt);font-weight:600}
-td.rk{width:22px;color:var(--dim);font:600 12px var(--disp)}
-td.pc{text-align:right;font:700 17px var(--disp);width:64px}
-td.dl{text-align:right;width:60px;font-size:12px}
+td.rk{width:28px;color:var(--dim);font:600 15px var(--disp)}
+td.pc{text-align:right;font:700 24px var(--disp);width:82px}
+td.dl{text-align:right;width:74px;font-size:15px}
 .up{color:#5FCB98}.dn{color:#E58B72}.flat{color:var(--dim)}
-.say{font:500 21px/1.35 var(--body)}
-.note{margin-top:10px;color:var(--dim);font-size:14px;
+.say{font:500 27px/1.4 var(--body)}
+.note{margin-top:12px;color:var(--dim);font-size:18px;
   border-left:2px solid var(--gold);padding-left:10px}
 @media(max-width:820px){.split{grid-template-columns:1fr}}
 @media(max-width:700px){
@@ -133,7 +133,7 @@ td.dl{text-align:right;width:60px;font-size:12px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v1.0 · 29 Aug</span>
+  <span class="ver">v1.1 · 29 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -206,7 +206,14 @@ function flag() {
 }
 
 /* ---------------------------------------------------------------- derived */
-function taken() { return new Set(Object.values(ST.made)); }
+const KEPT = new Set();
+DATA.owners.forEach(o => (DATA.keepers[o] || []).forEach(n => KEPT.add(n)));
+/** Everyone unavailable: the 30 keepers plus everyone drafted so far. */
+function taken() {
+  const s = new Set(KEPT);
+  Object.values(ST.made).forEach(n => s.add(n));
+  return s;
+}
 function onClock() {
   for (const pk of DATA.picks) if (!ST.made[pk.o]) return pk;
   return null;
@@ -225,10 +232,31 @@ function bestAvail(n) {
   // nothing over the next kicker; sorting by pts puts nine of them first.
   return available().sort((a, b) => b.vor - a.vor).slice(0, n);
 }
-/** market slot minus where he actually went. positive = fell = steal */
+/** Where he would actually have gone in THIS draft.
+
+    Published ADP assumes a 250-man pool. Thirty players are kept here and
+    never reach the board, so a receiver with an ADP of 40 is really the 12th
+    pick available. Comparing raw ADP to a pick number produced nonsense like
+    "Breece Hall fell 38 spots" when he went 2nd overall. */
+function marketSlot(p, before) {
+  let ahead = 0;
+  for (const q of DATA.players) {
+    if (q.n === p.n || q.adp >= p.adp) continue;
+    if (KEPT.has(q.n)) { ahead++; continue; }
+    if (before == null) { if (taken().has(q.n)) ahead++; continue; }
+    for (const o in ST.made) {
+      if (ST.made[o] === q.n && +o < before) { ahead++; break; }
+    }
+  }
+  return Math.max(1, p.adp - ahead);
+}
+/** Positive = he lasted PAST his slot (a fall, a steal).
+    Negative = taken before it (a reach).
+    Note the order: overall minus slot. The original had this backwards, which
+    labelled every early pick a steal. */
 function delta(name, overall) {
   const p = BY[name]; if (!p) return 0;
-  return p.adp - overall;
+  return Math.round(overall - marketSlot(p, overall));
 }
 
 /* ------------------------------------------------------------------ odds
@@ -412,13 +440,16 @@ function seedOf(s) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
   return h;
 }
-const pickFrom = (arr, seed) => arr[seed % arr.length];
+const pickFrom = (arr, seed) => arr[(seed >>> 3) % arr.length];
 
 const PRAISE_STEAL = [
   "Nobody moved on him for {d} picks. That is a bargain.",
   "The board said {adp}. The room said nothing. Good patience.",
   "Sat there {d} spots past his slot. Somebody was paying attention.",
-  "That is the pick of the round so far, and it was not close."
+  "That is the pick of the round so far, and it was not close.",
+  "Lasted to {o} when the board said {adp}. Well waited.",
+  "Everyone had a chance at him for {d} picks. One person took it.",
+  "{d} spots of value, collected quietly."
 ];
 const PRAISE_NEED = [
   "Fills the {pos} hole without reaching to do it. Clean.",
@@ -434,7 +465,11 @@ const SNARK_REACH = [
   "Reached {r} spots. He was not going anywhere.",
   "{r} picks early. Bold, and possibly unnecessary.",
   "Market had him at {adp}. This is pick {o}. Someone is confident.",
-  "Nobody was taking him. Nobody at all."
+  "Nobody was taking him. Nobody at all.",
+  "The board had him at {adp}. This is {o}. That is a statement.",
+  "Taken {r} spots early, with nobody bidding.",
+  "There was no pressure here. None whatsoever.",
+  "{r} ahead of the board. Conviction, or a list read upside down."
 ];
 const SNARK_RUN = [
   "That's {c} {pos}s in the last {n} picks. The run is on.",
@@ -473,7 +508,8 @@ function commentary(overall) {
   const seed = seedOf(nm + ":" + overall);
   const before = ownerCounts(pk.w);           // includes this pick
   const run = positionRun(overall, p.p, 6);
-  const fill = { d: d, r: -d, adp: p.adp, o: overall, pos: p.p, rd: pk.r,
+  const slot = marketSlot(p, overall);
+  const fill = { d: d, r: -d, adp: slot, o: overall, pos: p.p, rd: pk.r,
                  c: run, n: 6, left: available().length };
   fill.rds = pk.r === 1 ? "a round" : pk.r + " rounds";
   const put = t => t.replace(/\{(\w+)\}/g, (_, k) => fill[k]);
@@ -483,13 +519,13 @@ function commentary(overall) {
     verdict = "KICKER";
     fill.c = ownerCountsAll("K");
     line = put(pickFrom(SNARK_K, seed));
-  } else if (d <= -12) {
+  } else if (d <= -9) {
     verdict = "REACHED " + (-d);
     line = put(pickFrom(SNARK_REACH, seed));
   } else if (run >= 4) {
     verdict = "RUN ON " + p.p;
     line = put(pickFrom(SNARK_RUN, seed));
-  } else if (d >= 12) {
+  } else if (d >= 10) {
     verdict = "FELL " + d;
     line = put(pickFrom(PRAISE_STEAL, seed));
   } else if (before[p.p] <= 2 && (p.p === "RB" || p.p === "WR" || p.p === "TE")) {
@@ -548,6 +584,10 @@ function toggleTag(name, kind) {
 }
 
 /* ---------------------------------------------------------------- render */
+function shortName(full) {
+  const parts = String(full).split(" ");
+  return parts.length < 2 ? full : parts[0][0] + ". " + parts.slice(1).join(" ");
+}
 function posChip(p) {
   return '<span class="pos" style="background:var(--' + p + ')">' + p + '</span>';
 }
@@ -569,7 +609,7 @@ function gridHTML() {
       if (clock && pk.o === clock.o) cls += " now";
       if (!nm) { h += '<td class="' + cls + '"><span class="sub">' + "#" + pk.o + "</span></td>"; return; }
       const p = BY[nm] || { p: "RB" };
-      h += '<td class="' + cls + '"><span class="nm">' + esc(nm) + "</span><br>"
+      h += '<td class="' + cls + '"><span class="nm">' + esc(shortName(nm)) + "</span><br>"
         + '<span class="sub">' + p.p + " · " + (p.t || "") + "</span></td>";
     });
     h += "</tr>";
@@ -616,15 +656,15 @@ function broadcastView() {
   h += '<div class="hero">';
   if (last !== null) {
     const nm = ST.made[last], p = BY[nm] || {}, d = delta(nm, last);
-    const v = d > 10 ? '<span class="verdict steal">FELL ' + d + " SPOTS</span>"
-      : d < -10 ? '<span class="verdict reach">REACHED ' + (-d) + "</span>"
+    const v = d >= 10 ? '<span class="verdict steal">FELL ' + d + " SPOTS</span>"
+      : d <= -9 ? '<span class="verdict reach">REACHED ' + (-d) + "</span>"
       : '<span class="verdict market">AT MARKET</span>';
     h += '<div class="card fade" id="hero"><h2>Pick ' + last + " · "
       + esc(DATA.picks.find(x => x.o === last).w) + "</h2>"
       + '<div class="name">' + esc(nm) + "</div>"
       + '<div class="meta">' + posChip(p.p || "RB")
       + "<span>" + esc(p.t || "") + "</span>"
-      + "<span>market slot " + (p.adp || "—") + "</span>" + v + "</div></div>";
+      + "<span>market slot " + marketSlot(p, last) + "</span>" + v + "</div></div>";
   } else {
     h += '<div class="card"><h2>Before the first pick</h2>'
       + '<div class="name">Keepers are in</div>'
@@ -929,7 +969,7 @@ render();
 computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail,
-                 DATA, projectedRosters, oneSeason, mulberry32, computeOdds,
+                 DATA, BY, KEPT, marketSlot, projectedRosters, oneSeason, mulberry32, computeOdds,
                  odds: () => ODDS, ribbon: () => RIBBON };
 </script>
 </body>
