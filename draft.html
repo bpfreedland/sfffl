@@ -152,6 +152,7 @@ h2.hAI{color:var(--gold-lt)}
 .addbox{margin-top:10px;padding:10px;border:1px dashed var(--gold);
   border-radius:6px;background:#FBF6EA}
 button.addpos{font:700 13px var(--disp);letter-spacing:.08em}
+table.odds tr.wait td{opacity:.42}
 .warn{margin-top:10px;padding:8px 10px;border-left:3px solid #B05A44;
   background:#FBF0EE;color:#8C3A2B;font-size:13px;border-radius:0 4px 4px 0}
 table.odds{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
@@ -190,7 +191,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v2.0 · 30 Aug</span>
+  <span class="ver">v2.1 · 30 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -202,7 +203,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v2.0";
+const BUILD = "v2.1";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -473,6 +474,47 @@ function sampleRosters(rnd) {
     if (best) { rost[pk.w].push(best.n); t.add(best.n); }
   });
   return rost;
+}
+
+/** Replay a sampled completion in pick order, so we can ask what the board
+    looks like at a given pick. sampleRosters() only returns final rosters. */
+function sampleSequence(rnd) {
+  const rost = sampleRosters(rnd);
+  const idx = {}, seq = [];
+  DATA.owners.forEach(o => idx[o] = 0);
+  const kept = {};
+  DATA.owners.forEach(o => kept[o] = (DATA.keepers[o] || []).length);
+  DATA.picks.forEach(pk => {
+    const lst = rost[pk.w];
+    const i = kept[pk.w] + idx[pk.w];
+    if (i < lst.length) { seq.push([pk.o, lst[i]]); idx[pk.w]++; }
+  });
+  return seq;
+}
+
+/** Expected best projection at each position still on the board at `pickNo`,
+    averaged over sampled drafts. This replaces an ADP-based survival estimate,
+    which was badly wrong here: consensus has Trevor Lawrence going in the 80s,
+    but this league drafts a touchdown-only board where he is a first rounder.
+    The sampled drafts use the same board the room actually uses. */
+function expectedBoard(pickNo, trials) {
+  const rnd = mulberry32(0xB0A2D + pickNo);
+  const acc = {}, n = trials || 10;
+  POS.forEach(q => acc[q] = 0);
+  for (let t = 0; t < n; t++) {
+    const seq = sampleSequence(rnd);
+    const gone = new Set(KEPT);
+    for (const [o, nm] of seq) { if (o < pickNo) gone.add(nm); }
+    POS.forEach(q => {
+      let top = 0;
+      for (const p of DATA.players) {
+        if (p.p === q && !p.thin && !gone.has(p.n) && p.pts > top) top = p.pts;
+      }
+      acc[q] += top;
+    });
+  }
+  POS.forEach(q => acc[q] /= n);
+  return acc;
 }
 
 /** A handful of plausible completions; seasons are spread across them. */
@@ -1524,6 +1566,98 @@ function countsHTML() {
   return h;
 }
 
+/** Probability this player is still on the board at a given overall pick. */
+function survivesTo(p, pickNo) {
+  const t = taken();
+  let ahead = 0;
+  for (const q of DATA.players) {
+    if (q.adp < p.adp && t.has(q.n)) ahead++;
+  }
+  const slot = Math.max(1, p.adp - ahead);
+  return 1 / (1 + Math.exp((pickNo - slot) / 7));
+}
+
+/** Expected best projection at a position still available at `pickNo`, taken
+    from sampled drafts rather than from consensus ADP. Cached per pick, since
+    it runs ten completions and the answer only changes when a pick is made. */
+let boardCache = { key: "", now: null, next: null };
+/** My pick, and the one after it. Before the draft starts that is 9 then 19 —
+    the horizon that matters is mine to mine, not whoever happens to be up. */
+function myPickPair() {
+  const mine = DATA.picks.filter(x => x.w === DATA.me && !ST.made[x.o]);
+  return [mine[0] || null, mine[1] || null];
+}
+function boards() {
+  const pair = myPickPair();
+  const here = pair[0], nxt = pair[1];
+  const key = (here ? here.o : 0) + ":" + (nxt ? nxt.o : 0) + ":"
+    + Object.keys(ST.made).length;
+  if (boardCache.key !== key) {
+    boardCache = {
+      key: key,
+      now: here ? expectedBoard(here.o, 10) : null,
+      next: nxt ? expectedBoard(nxt.o, 10) : null
+    };
+  }
+  return boardCache;
+}
+function expectedBestAt(pos, which) {
+  const b = boards();
+  const t = which === "next" ? b.next : b.now;
+  return t ? t[pos] : 0;
+}
+
+/** THE POINT OF THIS PANEL.
+    VOR says what a player adds to a lineup. It does not say what it costs to
+    wait. Jason Myers is worth 27 over a replacement kicker and he will still be
+    sitting there in round 7, so spending pick 9 on him buys nothing. Urgency is
+    the projection minus what the position is expected to offer at my NEXT pick
+    — the actual price of deferring. */
+function urgencyOf(p) {
+  return p.pts - expectedBestAt(p.p, "next");
+}
+
+const URGENCY_FLOOR = 1.0;   // below this, the position can wait
+
+function urgencyHTML() {
+  const pair = myPickPair();
+  const here = pair[0], nxt = pair[1];
+  if (!here) return '<div class="sub">No picks left.</div>';
+  if (!nxt) return '<div class="sub">Last pick — nothing left to defer to.</div>';
+  const gap = nxt.o - here.o;
+  const posUrg = {};
+  POS.forEach(q => { posUrg[q] = expectedBestAt(q, "now") - expectedBestAt(q, "next"); });
+  let h = '<div class="sub" style="margin-bottom:8px">My pick #' + here.o
+    + " \u2192 #" + nxt.o + ", " + gap + " picks apart. "
+    + "Urgency is what deferring a position across that gap costs.</div>";
+
+  h += '<div class="row" style="margin-bottom:10px">' + POS.map(q =>
+    '<span class="tag ' + (posUrg[q] >= URGENCY_FLOOR ? "tgt" : "") + '">' + q + " "
+    + (posUrg[q] >= 0 ? "+" : "") + posUrg[q].toFixed(1) + "</span>").join("") + "</div>";
+
+  const rows = available().map(p => {
+    p._u = urgencyOf(p);
+    p._s = survivesTo(p, nxt.o);
+    return p;
+  }).sort((a, b) => b.vor - a.vor).slice(0, 12);
+
+  const parked = POS.filter(q => posUrg[q] < URGENCY_FLOOR);
+  h += '<table class="odds"><tr><th></th><th></th><th>VOR</th><th>URG</th><th>SURV</th></tr>';
+  rows.forEach(p => {
+    const wait = posUrg[p.p] < URGENCY_FLOOR;
+    h += "<tr" + (wait ? ' class="wait"' : "") + "><td>" + posChip(p.p)
+      + "</td><td>" + esc(p.n) + "</td>"
+      + '<td class="pcs">' + p.vor.toFixed(1) + "</td>"
+      + '<td class="pcs" style="color:' + (p._u >= 2 ? "#3E8E6E" : p._u >= 0 ? "#A98A4B" : "#B05A44")
+      + '">' + (p._u >= 0 ? "+" : "") + p._u.toFixed(1) + "</td>"
+      + '<td class="pcs">' + (100 * p._s).toFixed(0) + "%</td></tr>";
+  });
+  h += "</table>";
+  if (parked.length) h += '<div class="sub" style="margin-top:8px">Dimmed rows can wait: '
+    + parked.map(q => q + " (" + posUrg[q].toFixed(1) + ")").join(", ") + "</div>";
+  return h;
+}
+
 /** My next pick, and the chance each top player is still there for it.
     Logistic around his remaining market slot — the same shape the mock tool
     uses, recomputed against players actually gone rather than a simulation. */
@@ -1676,7 +1810,7 @@ function commandView() {
     + "</div>";
   h += '<div class="split3">';
   h += '<div class="card"><h2>My roster</h2>' + rosterHTML() + "</div>";
-  h += '<div class="card"><h2>Survives to my next pick</h2>' + survivalHTML() + "</div>";
+  h += '<div class="card"><h2>The board at my pick</h2>' + urgencyHTML() + "</div>";
   h += '<div class="card"><h2>Positions drafted</h2>' + countsHTML() + "</div>";
   h += "</div>";
   h += '<div class="card"><h2>Board</h2>' + gridHTML() + "</div>";
@@ -1806,7 +1940,7 @@ render();
 computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail,
-                 DATA, BY, KEPT, marketSlot, moneyline, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
+                 DATA, BY, KEPT, marketSlot, urgencyOf, expectedBestAt, survivesTo, expectedBoard, moneyline, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
                  odds: () => ODDS, ribbon: () => RIBBON };
 </script>
 </body>
