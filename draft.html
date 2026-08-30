@@ -102,7 +102,16 @@ ul.sug li.on{border-color:var(--navy);background:#EEF2F6}
 .gate{max-width:340px;margin:70px auto;text-align:center}
 .fade{animation:f .45s cubic-bezier(.2,.7,.3,1)}
 @keyframes f{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.split{display:grid;grid-template-columns:400px 1fr;gap:16px}
+.split{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.rcrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--slate)}
+.rclab{font:700 10px var(--disp);letter-spacing:.14em;width:44px;color:var(--dim)}
+.grade.sm{font-size:22px;padding:0}
+.rcname{font-weight:600}
+.rcwho{margin-left:auto;font:600 11px var(--disp);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--dim)}
+.rcsay{margin-top:11px;font-size:16px;line-height:1.4}
+.rcsay.ai{color:var(--gold-lt);font-style:italic}
+@media(max-width:1100px){.split{grid-template-columns:1fr}}
 .split3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
 @media(max-width:980px){.split3{grid-template-columns:1fr}}
 table.lineup,table.counts{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
@@ -172,7 +181,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v1.11 · 29 Aug</span>
+  <span class="ver">v1.12 · 29 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -855,6 +864,49 @@ function pickFacts(overall) {
   return L.join("\n");
 }
 
+/** One sentence on a completed round. Same voice, same rules, tighter leash. */
+function recapFacts(r) {
+  const e = roundExtremes(r); if (!e) return null;
+  const rows = DATA.picks.filter(x => x.r === r && ST.made[x.o])
+    .map(x => x.w + " took " + ST.made[x.o] + " (" + (BY[ST.made[x.o]] || {}).p + ")");
+  return ["ROUND " + r + " IS COMPLETE. All ten picks:",
+    rows.join("; ") + ".",
+    "By position: " + POS.filter(q => e.counts[q]).map(q => e.counts[q] + " " + q).join(", ") + ".",
+    "Best value of the round: " + e.best.w + " on " + e.best.n + ".",
+    "Worst: " + e.worst.w + " on " + e.worst.n + ".",
+    "",
+    "Write ONE sentence summarising the round. Not a list, not a recap of every",
+    "pick — the single thing that characterised it. Same voice and same rules:",
+    "no numbers from the board, third person, no addressing anyone."].join("\n");
+}
+
+async function runRecap(r) {
+  if (VIEW !== "command" || ST.mute) return;
+  if (ST.recap && ST.recap[r]) return;
+  const facts = recapFacts(r); if (!facts) return;
+  const key = apiKey(); if (!key) return;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), WIRE_TIMEOUT);
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", signal: ctl.signal,
+      headers: { "content-type": "application/json", "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model: MODEL, max_tokens: 120,
+        system: [{ type: "text", text: systemPrompt(),
+                   cache_control: { type: "ephemeral", ttl: "1h" } }],
+        messages: [{ role: "user", content: facts }] })
+    });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const data = await res.json();
+    const txt = (data.content || []).filter(b => b.type === "text")
+      .map(b => b.text).join(" ").trim();
+    if (txt) { ST.recap = ST.recap || {}; ST.recap[r] = txt; save(true); render(); }
+  } catch (e) { clearTimeout(timer); }
+}
+
 /** Ask Sonnet. Resolves to a string, or null if anything at all goes wrong. */
 async function askWire(overall) {
   const key = apiKey();
@@ -1017,6 +1069,8 @@ function commit(name, force) {
   render();
   computeOdds(render);
   runWire(pk.o, false);
+  const done = lastCompleteRound();
+  if (done) runRecap(done);
 }
 function undo() {
   const done = Object.keys(ST.made).map(Number).sort((a,b) => a-b);
@@ -1149,6 +1203,58 @@ function gradeOf(d) {
   return "F";
 }
 
+/** The last round where all ten picks are in. Zero until round one closes. */
+function lastCompleteRound() {
+  let best = 0;
+  for (let r = 1; r <= 12; r++) {
+    const picks = DATA.picks.filter(x => x.r === r);
+    if (picks.length && picks.every(x => ST.made[x.o])) best = r;
+  }
+  return best;
+}
+
+/** Best and worst pick of a round, by how far each landed from the board. */
+function roundExtremes(r) {
+  const rows = DATA.picks.filter(x => x.r === r && ST.made[x.o]).map(x => {
+    const nm = ST.made[x.o];
+    return { o: x.o, w: x.w, n: nm, p: BY[nm], d: delta(nm, x.o) };
+  }).filter(x => x.p);
+  if (!rows.length) return null;
+  const sorted = rows.slice().sort((a, b) => b.d - a.d);
+  const counts = { QB:0, RB:0, WR:0, TE:0, K:0 };
+  rows.forEach(x => counts[x.p.p]++);
+  return { best: sorted[0], worst: sorted[sorted.length - 1], counts: counts, n: rows.length };
+}
+
+/** Written fallback if the API never answered for this round. */
+function recapTemplate(r) {
+  const e = roundExtremes(r); if (!e) return "";
+  const led = POS.slice().sort((a, b) => e.counts[b] - e.counts[a])[0];
+  const bits = POS.filter(q => e.counts[q]).map(q => e.counts[q] + " " + q);
+  return "Round " + r + " went " + bits.join(", ") + ". "
+    + (e.counts[led] >= 5 ? "A run on " + led + "s, and everyone saw it at once."
+       : "No single position ran away with it.");
+}
+
+function recapFor(r) {
+  if (ST.recap && ST.recap[r]) return { text: ST.recap[r], live: true };
+  const t = recapTemplate(r);
+  return t ? { text: t, live: false } : null;
+}
+
+function recapHTML() {
+  const r = lastCompleteRound();
+  if (!r) return '<div class="sub">Recaps start once round one is complete.</div>';
+  const e = roundExtremes(r), rc = recapFor(r);
+  const row = (label, x, cls) => '<div class="rcrow"><span class="rclab">'
+    + label + '</span><span class="grade sm ' + cls + '">' + gradeOf(x.d) + "</span>"
+    + '<span class="rcname">' + esc(x.n) + '</span>'
+    + '<span class="rcwho">' + esc(x.w) + "</span></div>";
+  let h = row("BEST", e.best, "gA") + row("WORST", e.worst, "gF");
+  if (rc) h += '<div class="rcsay' + (rc.live ? " ai" : "") + '">' + esc(rc.text) + "</div>";
+  return h;
+}
+
 function broadcastView() {
   const pk = onClock();
   const done = Object.keys(ST.made).map(Number).sort((a, b) => a - b);
@@ -1183,6 +1289,9 @@ function broadcastView() {
     + (oddsBusy ? " · recomputing" : "") + "</h2>" + oddsListHTML()
     + '<div class="sub" style="margin-top:8px">' + SEASONS
     + " simulated seasons, recomputed every pick</div></div>";
+  const lcr = lastCompleteRound();
+  h += '<div class="card"><h2>' + (lcr ? "Round " + lcr + " recap" : "Round recap")
+    + "</h2>" + recapHTML() + "</div>";
   const cm = last === null ? null : commentary(last);
   const wr = last === null ? null : wireFor(last);
   const waiting = wr && !wr.live && ST.pending === last;
@@ -1571,7 +1680,7 @@ function wireCommand() {
   if (rs) rs.onclick = () => {
     if (!confirm("Clear every pick, all commentary and any typed-in players? "
       + "Download the transcript first if you want to keep it.")) return;
-    ST = { made: {}, targets: ST.targets, note: {}, wire: {}, custom: {} };
+    ST = { made: {}, targets: ST.targets, note: {}, wire: {}, custom: {}, recap: {} };
     RIBBON = [];
     stopTyping(); typeState = { key: "", full: "", shown: "", timer: null, done: true };
     save(true); render(); computeOdds(render);
@@ -1603,7 +1712,7 @@ render();
 computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail,
-                 DATA, BY, KEPT, marketSlot, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
+                 DATA, BY, KEPT, marketSlot, lastCompleteRound, roundExtremes, recapFor, recapHTML, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
                  odds: () => ODDS, ribbon: () => RIBBON };
 </script>
 </body>
