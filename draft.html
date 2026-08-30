@@ -103,7 +103,12 @@ ul.sug li.on{border-color:var(--navy);background:#EEF2F6}
 .fade{animation:f .45s cubic-bezier(.2,.7,.3,1)}
 @keyframes f{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .split{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
-.rcrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--slate)}
+.rcrow{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px solid var(--slate)}
+.rcblock + .rcblock{margin-top:14px;padding-top:12px;border-top:1px solid var(--slate)}
+.rcblock.prior{opacity:.62}
+.rchead{font:700 12px var(--disp);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:4px}
+.rcblock.prior .rchead{color:var(--dim)}
 .rclab{font:700 10px var(--disp);letter-spacing:.14em;width:44px;color:var(--dim)}
 .grade.sm{font-size:22px;padding:0}
 .rcname{font-weight:600}
@@ -181,7 +186,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v1.12 · 29 Aug</span>
+  <span class="ver">v1.14 · 29 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -193,6 +198,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
+const BUILD = "v1.14";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -207,34 +213,68 @@ let lastPickSeen = null;
 
 const chan = ("BroadcastChannel" in window) ? new BroadcastChannel(CH) : null;
 
+/* Every state change bumps a revision, and nothing is ever adopted unless its
+   revision is HIGHER than what this window already has. Without that rule any
+   stale participant — an old tab left open from an earlier build, a slow
+   message, a storage echo — can push the draft backwards for a few seconds
+   until the next real change puts it right. Which is exactly what it looked
+   like when it happened.
+
+   Messages are also stamped with the build. Two windows only talk if they are
+   running the same version of this page. */
 function save(broadcast) {
+  ST.rev = (ST.rev || 0) + 1;
   try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (e) {}
-  if (broadcast && chan) chan.postMessage({ st: ST, from: VIEW });
+  if (broadcast && chan) chan.postMessage({ st: ST, build: BUILD, from: VIEW });
   flag();
 }
+
+/** Take the incoming state only if it is genuinely newer. */
+function adopt(next, why) {
+  if (!next || typeof next !== "object") return false;
+  const mine = ST.rev || 0, theirs = next.rev || 0;
+  if (theirs <= mine && Object.keys(ST.made || {}).length) {
+    stale.push(why + " rev " + theirs + " <= " + mine);
+    if (stale.length > 6) stale.shift();
+    return false;
+  }
+  const hadPicks = Object.keys(ST.made || {}).length;
+  ST = Object.assign({ made:{}, targets:{}, note:{} }, next);
+  syncCustom();
+  render();
+  if (Object.keys(ST.made).length !== hadPicks) computeOdds(render);
+  return true;
+}
+let stale = [];
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) ST = Object.assign({ made:{}, targets:{}, note:{} }, JSON.parse(raw));
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed.rev == null) parsed.rev = 1;          // state from an older build
+    if ((parsed.rev || 0) > (ST.rev || 0) || !Object.keys(ST.made || {}).length) {
+      ST = Object.assign({ made:{}, targets:{}, note:{} }, parsed);
+    }
     syncCustom();
   } catch (e) {}
 }
+
 if (chan) chan.onmessage = e => {
   if (!e.data || !e.data.st) return;
-  const hadPicks = Object.keys(ST.made).length;
-  ST = e.data.st;
-  syncCustom();
-  try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (err) {}
-  render();
-  // only re-simulate when the draft actually moved; a commentary line arriving
-  // must not reset the odds arrows
-  if (Object.keys(ST.made).length !== hadPicks) computeOdds(render);
+  if (e.data.build !== BUILD) {                      // a tab on an older build
+    stale.push("build " + (e.data.build || "?"));
+    if (stale.length > 6) stale.shift();
+    return;
+  }
+  adopt(e.data.st, "channel");
+  // deliberately NOT rewriting localStorage here: the sender already did, and
+  // rewriting it fires a storage event straight back at the sender
 };
-/* second channel: another tab in the same browser also fires storage events,
-   which covers the case where BroadcastChannel is unavailable */
+
 window.addEventListener("storage", e => {
   if (e.key !== KEY || !e.newValue) return;
-  try { ST = JSON.parse(e.newValue); render(); computeOdds(render); } catch (err) {}
+  try { adopt(JSON.parse(e.newValue), "storage"); } catch (err) {}
 });
 
 /* iOS suspends background tabs, so a BroadcastChannel message sent while this
@@ -242,9 +282,13 @@ window.addEventListener("storage", e => {
    foreground. This is also what makes it testable on a phone: flip tabs and
    the other view has caught up. */
 function resync() {
-  const before = JSON.stringify(ST);
-  load();
-  if (JSON.stringify(ST) !== before) { render(); flag(); computeOdds(render); }
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed.rev == null) parsed.rev = 1;
+    if (adopt(parsed, "resync")) flag();
+  } catch (e) {}
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
 window.addEventListener("pageshow", resync);
@@ -1242,17 +1286,26 @@ function recapFor(r) {
   return t ? { text: t, live: false } : null;
 }
 
-function recapHTML() {
-  const r = lastCompleteRound();
-  if (!r) return '<div class="sub">Recaps start once round one is complete.</div>';
-  const e = roundExtremes(r), rc = recapFor(r);
+function recapBlock(r, dim) {
+  const e = roundExtremes(r); if (!e) return "";
+  const rc = recapFor(r);
   const row = (label, x, cls) => '<div class="rcrow"><span class="rclab">'
     + label + '</span><span class="grade sm ' + cls + '">' + gradeOf(x.d) + "</span>"
     + '<span class="rcname">' + esc(x.n) + '</span>'
     + '<span class="rcwho">' + esc(x.w) + "</span></div>";
-  let h = row("BEST", e.best, "gA") + row("WORST", e.worst, "gF");
+  let h = '<div class="rcblock' + (dim ? " prior" : "") + '">'
+    + '<div class="rchead">Round ' + r + "</div>"
+    + row("BEST", e.best, "gA") + row("WORST", e.worst, "gF");
   if (rc) h += '<div class="rcsay' + (rc.live ? " ai" : "") + '">' + esc(rc.text) + "</div>";
-  return h;
+  return h + "</div>";
+}
+
+/** The last two completed rounds. The older one is dimmed so the eye lands on
+    the newer without the panel turning into a wall. */
+function recapHTML() {
+  const r = lastCompleteRound();
+  if (!r) return '<div class="sub">Recaps start once round one is complete.</div>';
+  return recapBlock(r, false) + (r > 1 ? recapBlock(r - 1, true) : "");
 }
 
 function broadcastView() {
@@ -1290,8 +1343,7 @@ function broadcastView() {
     + '<div class="sub" style="margin-top:8px">' + SEASONS
     + " simulated seasons, recomputed every pick</div></div>";
   const lcr = lastCompleteRound();
-  h += '<div class="card"><h2>' + (lcr ? "Round " + lcr + " recap" : "Round recap")
-    + "</h2>" + recapHTML() + "</div>";
+  h += '<div class="card"><h2>Round recaps</h2>' + recapHTML() + "</div>";
   const cm = last === null ? null : commentary(last);
   const wr = last === null ? null : wireFor(last);
   const waiting = wr && !wr.live && ST.pending === last;
@@ -1576,6 +1628,8 @@ function commandView() {
     + '<button id="dltrans">Download transcript</button>'
     + '<button id="cptrans">Copy transcript</button></div>'
     + '<div class="sub" id="transnote" style="margin-top:6px">'
+    + "build " + BUILD + " · rev " + (ST.rev || 0) + " · "
+    + (stale.length ? stale.length + " stale message(s) ignored · " : "")
     + Object.keys(ST.made).length + " picks recorded, "
     + Object.keys(ST.wire || {}).length + " live lines saved. Cleared when you clear the draft."
     + "</div>"
@@ -1712,7 +1766,7 @@ render();
 computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail,
-                 DATA, BY, KEPT, marketSlot, lastCompleteRound, roundExtremes, recapFor, recapHTML, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
+                 DATA, BY, KEPT, marketSlot, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
                  odds: () => ODDS, ribbon: () => RIBBON };
 </script>
 </body>
