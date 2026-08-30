@@ -99,9 +99,25 @@ td.slot{font:700 11px var(--disp);letter-spacing:.1em;color:var(--dim);width:46p
 td.empty{color:#B9B1A2;font-style:italic}
 tr.me td{font-weight:600}
 td.met{color:#3E8E6E}td.short{color:#B05A44}
+.grade{font:700 34px/1 var(--disp);letter-spacing:.02em;padding:0 4px}
+.gA{color:#5FCB98}.gB{color:var(--gold-lt)}.gC{color:#E0A46B}.gF{color:#E58B72}
+h2.hInstant{color:var(--dim)}
+h2.hAI{color:var(--gold-lt)}
+.incoming{margin-left:12px;color:var(--gold);font-style:italic;text-transform:none;
+  letter-spacing:.02em;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.say.ai{color:var(--gold-lt);font-style:italic}
 .caret{color:var(--gold-lt);animation:blink 1s step-end infinite;margin-left:2px}
 @keyframes blink{50%{opacity:0}}
-@media(prefers-reduced-motion:reduce){.caret{animation:none;display:none}}
+@media(prefers-reduced-motion:reduce){.grade{font:700 34px/1 var(--disp);letter-spacing:.02em;padding:0 4px}
+.gA{color:#5FCB98}.gB{color:var(--gold-lt)}.gC{color:#E0A46B}.gF{color:#E58B72}
+h2.hInstant{color:var(--dim)}
+h2.hAI{color:var(--gold-lt)}
+.incoming{margin-left:12px;color:var(--gold);font-style:italic;text-transform:none;
+  letter-spacing:.02em;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.say.ai{color:var(--gold-lt);font-style:italic}
+.caret{animation:none;display:none}}
 .livedot{margin-left:9px;font:600 10px var(--disp);letter-spacing:.14em;
   color:var(--deep);background:var(--gold-lt);padding:3px 6px;border-radius:3px}
 .addbox{margin-top:10px;padding:10px;border:1px dashed var(--gold);
@@ -141,7 +157,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v1.8 · 29 Aug</span>
+  <span class="ver">v1.9 · 29 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -181,11 +197,14 @@ function load() {
 }
 if (chan) chan.onmessage = e => {
   if (!e.data || !e.data.st) return;
+  const hadPicks = Object.keys(ST.made).length;
   ST = e.data.st;
   syncCustom();
   try { localStorage.setItem(KEY, JSON.stringify(ST)); } catch (err) {}
   render();
-  computeOdds(render);        // the receiving window must recompute too
+  // only re-simulate when the draft actually moved; a commentary line arriving
+  // must not reset the odds arrows
+  if (Object.keys(ST.made).length !== hadPicks) computeOdds(render);
 };
 /* second channel: another tab in the same browser also fires storage events,
    which covers the case where BroadcastChannel is unavailable */
@@ -478,13 +497,18 @@ function computeOdds(done) {
   let n = 0;
   oddsBusy = true;
   (function slice() {
-    if (myRun !== oddsRun) return;            // a newer pick superseded this run
+    // A newer pick supersedes this run — except for the very first one, which
+    // has to finish or there is no baseline to measure pick 1 against.
+    if (myRun !== oddsRun && RIBBON.length) return;
     const end = Math.min(n + 40, SEASONS);
     for (; n < end; n++) tally[oneSeason(samples[n % samples.length], rnd).champ]++;
     if (n < SEASONS) return setTimeout(slice, 0);
     DATA.owners.forEach(o => ODDS[o] = 100 * tally[o] / SEASONS);
     oddsBusy = false;
-    RIBBON.push({ pick: Object.keys(ST.made).length, odds: Object.assign({}, ODDS) });
+    const pc = Object.keys(ST.made).length;
+    const tail = RIBBON[RIBBON.length - 1];
+    if (tail && tail.pick === pc) tail.odds = Object.assign({}, ODDS);
+    else RIBBON.push({ pick: pc, odds: Object.assign({}, ODDS) });
     if (done) done();
   })();
 }
@@ -666,7 +690,7 @@ function wpct(rec) {
 function systemPrompt() {
   return [
 "You are the play-by-play voice of the SFFFL, a ten-team fantasy football league",
-"in its 25th season. You react to each pick with a short paragraph.",
+"in its 25th season. You react to each pick in two or three sentences.",
 "",
 "THE FORMAT. Touchdowns only. 6 points rushing or receiving, 3 passing, 3 per field",
 "goal, 1 per extra point. No yardage, no receptions, no defense. This is the entire",
@@ -703,10 +727,13 @@ loreBlock(),
 "table has known since 2002 and being told again is the least funny thing you could",
 "do. Never invent a fact you were not given.",
 "",
-"LENGTH. Two to four sentences for a routine pick. Five or six when the pick",
-"deserves it — a real reach, a steal, a run, an early kicker, a roster that has",
-"just gone lopsided, a moment that connects to something in the league record.",
-"Never one line. There is time between picks in this draft and dead air to fill.",
+"LENGTH. Two sentences for a routine pick, three when it earns it, four at the",
+"absolute most. Tight and punchy beats thorough. If you are choosing between two",
+"good observations, pick the better one and drop the other.",
+"",
+"PERSON. Third person throughout. Talk ABOUT the pick and the owner who made it,",
+"never TO anyone. No \"you\", no \"we\", no \"I\". Refer to owners by name — Craig,",
+"Dylan, Matt. You are commentating on a draft, not addressing the room.",
 "",
 "GO DEEPER THAN THE VERDICT. Saying a pick was a reach is the least interesting",
 "thing you can say about it. Use the room: what it does to that roster's shape,",
@@ -774,7 +801,7 @@ async function askWire(overall) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 420,
+        max_tokens: 260,
         system: [{ type: "text", text: systemPrompt(),
                    cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages: [{ role: "user", content: facts }]
@@ -802,14 +829,16 @@ async function runWire(overall, force) {
   if (VIEW !== "command") return;          // only the key holder calls out
   if (ST.mute) return;
   if (!force && ST.wire && ST.wire[overall]) return;
-  wireBusy = true; render();
+  wireBusy = true;
+  ST.pending = overall;          // tells Broadcast that a second pass is coming
+  save(true);
+  render();
   const txt = await askWire(overall);
   wireBusy = false;
-  if (txt) {
-    ST.wire = ST.wire || {};
-    ST.wire[overall] = txt;
-    save(true);
-  }
+  if (ST.pending === overall) delete ST.pending;
+  ST.wire = ST.wire || {};
+  if (txt) ST.wire[overall] = txt;
+  save(true);
   render();
 }
 
@@ -926,7 +955,7 @@ function gridHTML() {
       const pk = DATA.picks.find(x => x.r === r && x.w === o);
       if (!pk) { h += "<td></td>"; return; }
       const nm = ST.made[pk.o];
-      let cls = (o === DATA.me ? "mine" : "");
+      let cls = (o === DATA.me && VIEW === "command" ? "mine" : "");
       if (clock && pk.o === clock.o) cls += " now";
       if (!nm) { h += '<td class="' + cls + '"><span class="sub">' + "#" + pk.o + "</span></td>"; return; }
       const p = BY[nm] || { p: "RB" };
@@ -950,7 +979,11 @@ function gridHTML() {
    ten numbers do, so it went. Delta is against the reading before this pick,
    which is meaningful now that the sim uses common random numbers. */
 function oddsListHTML() {
-  const prev = RIBBON.length > 1 ? RIBBON[RIBBON.length - 2].odds : null;
+  const pc = Object.keys(ST.made).length;
+  let prev = null;
+  for (let i = RIBBON.length - 1; i >= 0; i--) {
+    if (RIBBON[i].pick < pc) { prev = RIBBON[i].odds; break; }
+  }
   const rows = DATA.owners.slice().sort((x, y) => ODDS[y] - ODDS[x]);
   let h = '<table class="odds">';
   rows.forEach((o, i) => {
@@ -1000,6 +1033,19 @@ function startTyping(key, full) {
   }, TYPE_MS);
 }
 
+/** A pick graded against where the market had him, once keepers are removed. */
+function gradeOf(d) {
+  if (d >= 25) return "A+";
+  if (d >= 15) return "A";
+  if (d >= 8) return "A-";
+  if (d >= 3) return "B+";
+  if (d >= -2) return "B";
+  if (d >= -7) return "B-";
+  if (d >= -14) return "C";
+  if (d >= -24) return "D";
+  return "F";
+}
+
 function broadcastView() {
   const pk = onClock();
   const done = Object.keys(ST.made).map(Number).sort((a, b) => a - b);
@@ -1017,7 +1063,8 @@ function broadcastView() {
       + '<div class="name">' + esc(nm) + "</div>"
       + '<div class="meta">' + posChip(p.p || "RB")
       + "<span>" + esc(p.t || "") + "</span>"
-      + "<span>market slot " + marketSlot(p, last) + "</span>" + v + "</div></div>";
+      + '<span class="grade ' + (d >= 3 ? "gA" : d >= -2 ? "gB" : d >= -14 ? "gC" : "gF")
+      + '">' + gradeOf(d) + "</span>" + v + "</div></div>";
   } else {
     h += '<div class="card"><h2>Before the first pick</h2>'
       + '<div class="name">Keepers are in</div>'
@@ -1037,9 +1084,11 @@ function broadcastView() {
     + " simulated seasons, recomputed every pick</div></div>";
   const cm = last === null ? null : commentary(last);
   const wr = last === null ? null : wireFor(last);
-  h += '<div class="card"><h2>' + (cm ? esc(cm.verdict) : "The wire")
-    + (wr && wr.live ? '<span class="livedot">live</span>' : "") + "</h2>"
-    + (wr ? '<div class="say"><span id="saytext">'
+  const waiting = wr && !wr.live && ST.pending === last;
+  h += '<div class="card"><h2 class="' + (wr && wr.live ? "hAI" : "hInstant") + '">'
+    + (last === null ? "The wire" : wr && wr.live ? "AI insights" : "Instant analysis")
+    + (waiting ? '<span class="incoming">AI insights incoming\u2026</span>' : "") + "</h2>"
+    + (wr ? '<div class="say' + (wr.live ? " ai" : "") + '"><span id="saytext">'
         + esc(typeState.key === "w" + last && !typeState.done ? typeState.shown : wr.text)
         + '</span><span id="caret" class="caret"'
         + (typeState.key === "w" + last && !typeState.done ? "" : ' style="display:none"')
