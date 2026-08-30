@@ -159,6 +159,10 @@ table.odds td{padding:8px 5px;font-size:18px;border-bottom:1px solid var(--slate
 .bcast table.odds tr.me td{color:var(--gold-lt);font-weight:600}
 td.rk{width:28px;color:var(--dim);font:600 15px var(--disp)}
 td.pc{text-align:right;font:700 24px var(--disp);width:82px}
+td.ml{text-align:right;font:700 26px var(--disp);width:86px;letter-spacing:.01em}
+td.pcs{text-align:right;font-size:13px;color:var(--dim);width:52px;
+  font-variant-numeric:tabular-nums}
+.bcast table.odds tr.me td.ml{color:var(--gold-lt)}
 td.dl{text-align:right;width:74px;font-size:15px}
 .up{color:#5FCB98}.dn{color:#E58B72}.flat{color:var(--dim)}
 .say{font:500 27px/1.4 var(--body)}
@@ -186,7 +190,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v1.14 · 29 Aug</span>
+  <span class="ver">v1.16 · 29 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -198,7 +202,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v1.14";
+const BUILD = "v1.16";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -537,16 +541,21 @@ function oneSeason(rost, rnd) {
   }
   const order = DATA.owners.slice().sort((x, y) =>
     (wins[y] - wins[x]) || (pf[y] - pf[x]));
-  const dw = {};
-  order.forEach(o => { if (!dw[DATA.div[o]]) dw[DATA.div[o]] = o; });
-  const seeds = Object.values(dw).sort((x, y) => order.indexOf(x) - order.indexOf(y));
-  for (const o of order) if (seeds.length < 4 && seeds.indexOf(o) < 0) seeds.push(o);
+  /* Top TWO from each division qualify, crossed in the semis: each division
+     champion plays the other division's runner-up. So the final can be an
+     intra-division rematch, and — the part that actually moves the numbers —
+     qualification is by division standing, not overall record. Third in a
+     stacked division misses while second in a soft one gets in. */
+  const byDiv = {};
+  order.forEach(o => { (byDiv[DATA.div[o]] = byDiv[DATA.div[o]] || []).push(o); });
+  const divs = Object.keys(byDiv);
+  const A = byDiv[divs[0]], B = byDiv[divs[1]];
   const play = (x, y) => {
     const a = score(x, null), b = score(y, null);
     return a === b ? (pf[x] > pf[y] ? x : y) : (a > b ? x : y);
   };
-  return { champ: play(play(seeds[0], seeds[3]), play(seeds[1], seeds[2])),
-           top: order[0] };
+  const champ = play(play(A[0], B[1]), play(B[0], A[1]));
+  return { champ: champ, top: order[0] };
 }
 
 /* sliced runner ------------------------------------------------------- */
@@ -1179,6 +1188,25 @@ function gridHTML() {
 /* Odds as a ranked list. The stacked ribbon looked good and said less than
    ten numbers do, so it went. Delta is against the reading before this pick,
    which is meaningful now that the sim uses common random numbers. */
+/** Probability to an American moneyline, rounded the way a book would print it.
+    Everyone here is under 50%, so every line is plus-money. Rounding matters:
+    +425 reads as odds, +426 reads as a spreadsheet. */
+function moneyline(pct) {
+  const n = Object.keys(ST.made).length;
+  const p = Math.max(pct / 100, 1 / (2 * SEASONS));   // never divide by zero
+  if (p >= 0.5) {
+    const v = 100 * p / (1 - p);
+    return "-" + Math.round(v / 5) * 5;
+  }
+  const v = 100 * (1 - p) / p;
+  const r = v < 400 ? Math.round(v / 5) * 5
+          : v < 1000 ? Math.round(v / 25) * 25
+          : v < 5000 ? Math.round(v / 100) * 100
+          : v < 25000 ? Math.round(v / 500) * 500
+          : 25000;
+  return "+" + r;
+}
+
 function oddsListHTML() {
   const pc = Object.keys(ST.made).length;
   let prev = null;
@@ -1193,10 +1221,12 @@ function oddsListHTML() {
     const arrow = !prev || Math.abs(dv) < 0.35 ? '<span class="flat">—</span>'
       : dv > 0 ? '<span class="up">&#9650; ' + dv.toFixed(1) + "</span>"
                : '<span class="dn">&#9660; ' + Math.abs(dv).toFixed(1) + "</span>";
-    h += "<tr" + (o === DATA.me ? ' class="me"' : "") + ">"
+    // no highlight on the shared screen — same reason the board lost it
+    h += "<tr" + (o === DATA.me && VIEW === "command" ? ' class="me"' : "") + ">"
       + '<td class="rk">' + (i + 1) + "</td>"
       + "<td>" + esc(o) + "</td>"
-      + '<td class="pc">' + v.toFixed(1) + "%</td>"
+      + '<td class="ml">' + moneyline(v) + "</td>"
+      + '<td class="pcs">' + v.toFixed(1) + "%</td>"
       + '<td class="dl">' + arrow + "</td></tr>";
   });
   return h + "</table>";
@@ -1766,7 +1796,7 @@ render();
 computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail,
-                 DATA, BY, KEPT, marketSlot, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
+                 DATA, BY, KEPT, marketSlot, moneyline, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, wireFor, apiKey, setApiKey, projectedRosters, oneSeason, mulberry32, computeOdds,
                  odds: () => ODDS, ribbon: () => RIBBON };
 </script>
 </body>
