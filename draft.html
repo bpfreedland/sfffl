@@ -157,7 +157,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v1.9 · 29 Aug</span>
+  <span class="ver">v1.10 · 29 Aug</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <span class="sp" id="sync">·</span>
@@ -535,7 +535,7 @@ const PRAISE_STEAL = [
   "The board said {adp}. The room said nothing. Good patience.",
   "Sat there {d} spots past his slot. Somebody was paying attention.",
   "That is the pick of the round so far, and it was not close.",
-  "Lasted to {o} when the board said {adp}. Well waited.",
+  "Waited him out and got him. Well played.",
   "Everyone had a chance at him for {d} picks. One person took it.",
   "{d} spots of value, collected quietly."
 ];
@@ -546,15 +546,15 @@ const PRAISE_NEED = [
 ];
 const PRAISE_VALUE = [
   "Straight down the middle. Nothing to argue with.",
-  "Market slot {adp}, taken at {o}. Fair and sensible.",
+  "Fair, sensible, hard to argue with.",
   "The obvious pick, made without fuss."
 ];
 const SNARK_REACH = [
   "Reached {r} spots. He was not going anywhere.",
   "{r} picks early. Bold, and possibly unnecessary.",
-  "Market had him at {adp}. This is pick {o}. Someone is confident.",
+  "Nobody else was close to taking him. Someone is confident.",
   "Nobody was taking him. Nobody at all.",
-  "The board had him at {adp}. This is {o}. That is a statement.",
+  "That is a statement, and not a quiet one.",
   "Taken {r} spots early, with nobody bidding.",
   "There was no pressure here. None whatsoever.",
   "{r} ahead of the board. Conviction, or a list read upside down."
@@ -707,15 +707,20 @@ function systemPrompt() {
 "",
 loreBlock(),
 "VOICE. Loud sports-bar energy, short punchy sentences. A friend at the table who",
-"has watched all 24 seasons, not a broadcaster reading a card.",
+"has watched all 24 seasons, not a broadcaster reading a card. Have opinions and",
+"commit to them — hedging is worse than being wrong. Be vivid. A specific image",
+"beats a general adjective. Do not be polite about a bad pick, and do not be",
+"lukewarm about a good one. The worst possible line is one that could have been",
+"written about any pick in any draft.",
 "",
 "BALANCE THIS CAREFULLY. Most picks are perfectly reasonable and should get a",
 "reasonable line — interested, energetic, not sarcastic. Roast only when the facts",
 "earn it: a real reach, a third kicker in round 7, a fourth running back for a team",
 "with no tight end. Across a full draft you should be roughly one part roast, two",
 "parts straight enthusiasm, one part dry observation. If you cannot find a genuine",
-"reason to mock the pick, do not manufacture one — say something true about the",
-"player instead. A good pick gets a clean compliment with no sting in the tail.",
+"reason to mock the pick, do not manufacture one — reach for the trivia instead.",
+"A good pick gets a clean compliment with no sting in the tail, delivered with",
+"some heat.",
 "Vary your openings; never start two consecutive lines the same way.",
 "",
 "USING THE HISTORY. You know 24 years of this league. Reach for it when a pick",
@@ -730,6 +735,13 @@ loreBlock(),
 "LENGTH. Two sentences for a routine pick, three when it earns it, four at the",
 "absolute most. Tight and punchy beats thorough. If you are choosing between two",
 "good observations, pick the better one and drop the other.",
+"",
+"NEVER SHOW THE MATH. You are given a consensus board position and how far off it",
+"the pick landed. Use it to form an opinion — a strong one — and then never cite",
+"it. No ADP, no slot numbers, no \"the board had him at 40\", no percentages, no",
+"talk of markets or value over replacement. Nine people are watching who have",
+"never seen a projection in their lives. Say he was taken far too early and sound",
+"certain about it; do not explain how you know.",
 "",
 "PERSON. Third person throughout. Talk ABOUT the pick and the owner who made it,",
 "never TO anyone. No \"you\", no \"we\", no \"I\". Refer to owners by name — Craig,",
@@ -749,6 +761,37 @@ loreBlock(),
 "",
 "Return only the commentary. No preamble, no quotation marks, no emoji."
   ].join("\n");
+}
+
+/** A specific fact from the 24-year record, rotated so the same owner does not
+    produce the same line twice in a night. These are the deep cuts. */
+function deepCut(o, salt) {
+  const l = (DATA.lore || {})[o] || {}, lg = (DATA.lore || {})._league || {};
+  const c = [];
+  if (l.titles && l.titles.length)
+    c.push(o + " has won it in " + l.titles.join(", ") + ".");
+  if (l.drought > 5) c.push(o + " has not won since " + (2025 - l.drought) + " — " + l.drought + " years.");
+  if (l.drought === 0) c.push(o + " is the defending champion.");
+  if (l.titles && !l.titles.length) c.push(o + " has never won this league. " + lg.seasons + " seasons.");
+  if (l.runnerUp && l.runnerUp.length)
+    c.push(o + " has lost the final " + l.runnerUp.length + " time" + (l.runnerUp.length > 1 ? "s" : "")
+      + " (" + l.runnerUp.join(", ") + ").");
+  if (l.coty && l.coty.length) c.push(o + " was coach of the year in " + l.coty.join(", ") + ".");
+  if (l.money) c.push(o + " has taken " + l.money + " out of this league over " + l.cashes + " cashes.");
+  if (l.owns) c.push(o + " owns " + l.owns[0] + " head to head, " + l.owns[1] + ".");
+  if (l.ownedBy) c.push(l.ownedBy[0] + " owns " + o + " head to head, " + l.ownedBy[1] + ".");
+  if (l.rec) c.push(o + " is " + l.rec + " all time.");
+  c.push("In " + lg.seasons + " seasons only " + (lg.repeats || []).map(r => r[0]).join(", ")
+    + " has ever defended a title.");
+  return c.length ? c[(seedOf(o + ":" + salt) >>> 5) % c.length] : "";
+}
+
+/** Is this pick dull? Dull picks are where the trivia goes. */
+function isRoutine(overall) {
+  const nm = ST.made[overall], p = BY[nm];
+  if (!p) return true;
+  const d = Math.abs(delta(nm, overall));
+  return d < 8 && positionRun(overall, p.p, 6) < 4 && p.p !== "K";
 }
 
 function pickFacts(overall) {
@@ -778,6 +821,21 @@ function pickFacts(overall) {
     + (mv > 0 ? "+" : "") + mv.toFixed(1) + " points to " + (ODDS[pk.w] || 0).toFixed(1) + "%.");
   const nextUp = onClock();
   if (nextUp) L.push("On the clock next: " + nextUp.w + ".");
+
+  // one deep cut per round minimum, and always on a dull pick
+  ST.deep = ST.deep || {};
+  const roundDone = !!ST.deep[pk.r];
+  const late = (overall % 10) >= 8;
+  if (!roundDone && (isRoutine(overall) || late)) {
+    L.push("");
+    L.push("DEEP CUT — use this, it is the interesting part of this pick: "
+      + deepCut(pk.w, pk.r));
+    ST.deep[pk.r] = overall;
+  } else if (isRoutine(overall)) {
+    L.push("");
+    L.push("This pick is unremarkable on its own. Something true and specific is "
+      + "better than a forced verdict: " + deepCut(pk.w, overall));
+  }
   return L.join("\n");
 }
 
@@ -1055,16 +1113,14 @@ function broadcastView() {
   h += '<div class="hero">';
   if (last !== null) {
     const nm = ST.made[last], p = BY[nm] || {}, d = delta(nm, last);
-    const v = d >= 10 ? '<span class="verdict steal">FELL ' + d + " SPOTS</span>"
-      : d <= -9 ? '<span class="verdict reach">REACHED ' + (-d) + "</span>"
-      : '<span class="verdict market">AT MARKET</span>';
+
     h += '<div class="card fade" id="hero"><h2>Pick ' + last + " · "
       + esc(DATA.picks.find(x => x.o === last).w) + "</h2>"
       + '<div class="name">' + esc(nm) + "</div>"
       + '<div class="meta">' + posChip(p.p || "RB")
       + "<span>" + esc(p.t || "") + "</span>"
       + '<span class="grade ' + (d >= 3 ? "gA" : d >= -2 ? "gB" : d >= -14 ? "gC" : "gF")
-      + '">' + gradeOf(d) + "</span>" + v + "</div></div>";
+      + '">' + gradeOf(d) + "</span></div></div>";
   } else {
     h += '<div class="card"><h2>Before the first pick</h2>'
       + '<div class="name">Keepers are in</div>'
