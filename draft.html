@@ -19,23 +19,8 @@
 *{box-sizing:border-box}
 body{margin:0;font:15px/1.45 var(--body);background:var(--parch);color:var(--navy)}
 body.bcast{background:var(--deep);color:var(--parch)}
-/* AI UNLEASHED. Deliberately ridiculous: this fires once a round and is supposed
-   to be visible from across the room. Colours are literals rather than palette
-   variables because nothing else in the build is ever meant to look like this. */
-.card.hot{border:3px solid #E03A1E;background:linear-gradient(180deg,
-  rgba(224,58,30,.16),rgba(224,58,30,.04) 60%,transparent);
-  box-shadow:0 0 0 1px rgba(224,58,30,.5),0 0 34px rgba(224,58,30,.42);
-  animation:hotpulse 1.6s ease-in-out infinite}
-@keyframes hotpulse{
-  0%,100%{box-shadow:0 0 0 1px rgba(224,58,30,.5),0 0 26px rgba(224,58,30,.32)}
-  50%    {box-shadow:0 0 0 1px rgba(224,58,30,.8),0 0 46px rgba(224,58,30,.6)}}
-.card.hot h2.hHot{color:#FF6A45;font:700 25px/1 var(--disp);letter-spacing:.10em;
-  text-transform:uppercase;display:flex;align-items:center;gap:10px}
-.card.hot .say{color:#FFEDE6;font-size:23px;line-height:1.34}
-.flame{display:inline-block;animation:flick .5s steps(2,end) infinite;font-size:24px}
-.flame.b{animation-delay:.25s}
-@keyframes flick{0%{transform:scale(1) rotate(-3deg)}100%{transform:scale(1.18) rotate(3deg)}}
-@media(max-width:820px){.card.hot h2.hHot{font-size:19px}.card.hot .say{font-size:19px}}
+.asof{float:right;font:600 12px/1 var(--disp);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--dim);padding-top:5px}
 .clockbar{display:flex;align-items:baseline;gap:12px;padding:10px 16px}
 .clockbar .clockname{font-size:30px}
 .clockbar .cbmeta{color:var(--dim);font-size:15px}
@@ -283,7 +268,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v2.24 · 4 Sep</span>
+  <span class="ver">v3.0 · 5 Sep</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <button id="roomflip" class="flip" style="display:none">Room screen</button>
@@ -296,7 +281,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v2.24/0904-2359";
+const BUILD = "v3.0/0905-0015";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -1060,11 +1045,6 @@ function ownerCountsAll(pos) {
 const AKEY = "sfffl-api-key";
 const MODEL = "claude-sonnet-4-6";
 const WIRE_TIMEOUT = 9000;
-/* An unleashed line is five to eight sentences against a 320-token ceiling. That
-   is four to six seconds of generation before time-to-first-token and network,
-   which sits right on the 9s budget a two-sentence line never came close to.
-   v2.23 aborted mid-response and showed nothing at all. Hot picks get room. */
-const WIRE_TIMEOUT_HOT = 30000;
 
 function apiKey() { try { return localStorage.getItem(AKEY) || ""; } catch (e) { return ""; } }
 function setApiKey(k) {
@@ -1631,148 +1611,14 @@ async function runRecap(r) {
   } catch (e) { clearTimeout(timer); }
 }
 
-/* --------------------------------------------------------- AI UNLEASHED
-   Once a round the wire is let off the leash. Everything here is scheduling and
-   guardrails; the register itself lives in unleashedBlock().
-
-   One fact per owner, supplied by Ben. These reach the model ONLY on an
-   unleashed pick and never touch the normal voice. Luke's ships as the nickname
-   alone, with its origin deliberately left out: the joke is a grown man called
-   Frex, and the derivation would put a second appearance item in front of a model
-   already holding Kyle's. Material the file never contains cannot leak. */
-const OWNER_FACTS = {
-  Ben: "obsessed with AI even though it has nothing to do with his life or his job",
-  Craig: "rules this league with an iron fist and would not add yardage to the scoring if it cured cancer",
-  Dylan: "never drags himself to the live draft",
-  Matt: "mortgaged his future to get Gibbs and cares nothing whatsoever about tomorrow",
-  Kyle: "at least six inches taller than anyone else in the league",
-  Kelin: "a horrific Browns homer, for a joke of a franchise",
-  Jeremy: "may start the draft sober; the odds of him being drunk by the end are 99.9%",
-  Luke: "answers to Frex, a nickname he has never escaped",
-  Josh: "decorates his home with dozens of mounted deer heads",
-  Tony: "a grown adult still using the email address Fuzzibob@gmail.com"
-};
-
-/* Round 1 is Ben. The man who built the tool takes the first shot, which settles
-   the rigging question before anyone thinks to ask it. Rounds 2-10 are a shuffle
-   of the other nine, so everyone is hit exactly once and no back-to-back is
-   possible by construction. Rounds 11-12 are bonus hits, drawn from whoever was
-   hit longest ago, excluding Ben (he already opened) and the previous round. */
-function buildUnleashedPlan(seed) {
-  const rnd = mulberry32(seed);
-  const others = DATA.owners.filter(o => o !== "Ben");
-  for (let i = others.length - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    const t = others[i]; others[i] = others[j]; others[j] = t;
-  }
-  const plan = { 1: "Ben" };
-  others.forEach((o, i) => { plan[i + 2] = o; });
-  for (let r = 11; r <= 12; r++) {
-    const prev = plan[r - 1];
-    const pool = others.filter(o => o !== prev);
-    pool.sort((a, b) => others.indexOf(a) - others.indexOf(b));
-    plan[r] = pool[0];
-  }
-  return plan;
-}
-
-function ensureUnleashedPlan() {
-  if (!ST.unleashedPlan) {
-    ST.unleashedPlan = buildUnleashedPlan(seedOf(BUILD + "|unleashed"));
-  }
-  return ST.unleashedPlan;
-}
-
-/* Which pick in this round is the hot one. Resolves three awkward cases: the
-   planned owner traded his pick in this round away, he holds two of them, and
-   his call failed so the slot has to move on. */
-function unleashedTarget(round) {
-  if (ST.hotRound && ST.hotRound[round] != null) return ST.hotRound[round];
-  const plan = ST.unleashedPlan;
-  if (!plan) return null;
-  const picks = DATA.picks.filter(x => x.r === round).sort((a, b) => a.o - b.o);
-  if (!picks.length) return null;
-  const want = plan[round];
-  let mine = picks.filter(x => x.w === want);
-  if (!mine.length) {
-    /* The planned owner holds no pick in this round -- real in this league, not
-       hypothetical: Dylan and Craig have no round-12 pick because Kelin and Matt
-       each hold two. Fall to whoever in this round was hit longest ago, so the
-       bonus does not land on the man who was just done. */
-    const hitAt = {};
-    for (let k = 1; k < round; k++) if (plan[k]) hitAt[plan[k]] = k;
-    const owners = picks.map(x => x.w).filter((v, i, a) => a.indexOf(v) === i);
-    owners.sort((a, b) => (hitAt[a] || 0) - (hitAt[b] || 0));
-    mine = picks.filter(x => x.w === owners[0]);
-  }
-  const skip = (ST.hotSkip && ST.hotSkip[round]) || 0;
-  const idx = picks.indexOf(mine[0]) + skip;
-  return idx < picks.length ? picks[idx].o : null;
-}
-
-function isUnleashed(overall) {
-  const pk = DATA.picks.find(x => x.o === overall);
-  return !!pk && unleashedTarget(pk.r) === overall;
-}
-
-/* Appended to the system prompt on a hot pick only. Every factual guardrail in
-   the base prompt still applies; two are restated because a maximally confident
-   voice sells an invented fact far harder than a measured one does. */
-function unleashedBlock(overall) {
-  const pk = DATA.picks.find(x => x.o === overall);
-  const fact = OWNER_FACTS[pk.w];
-  return [
-"",
-"=== AI UNLEASHED. THIS PICK ONLY. ===",
-"",
-"The instructions above were written for the other 119 picks. For THIS one, the",
-"following named rules are SUSPENDED. Do not obey them:",
-"",
-"  - LENGTH is suspended. It says one or two sentences and never four. Ignore it.",
-"    Write FIVE TO EIGHT sentences. Anything under five is a failed response.",
-"  - SENTENCES is suspended insofar as it demands brevity and cutting. Do not cut.",
-"    Build, repeat, escalate, pile on. Repetition for effect is the point.",
-"  - BALANCE is suspended. It rations the roast across the draft. Not here.",
-"  - In HARD LIMITS, the words 'Nothing crude' are suspended. Swear. Be crude",
-"    about the DECISION. Capitals for shouting are good. Be theatrical and absurd.",
-"",
-"Everything in HARD LIMITS other than 'Nothing crude' still binds. So does every",
-"factual rule. See the bottom of this block.",
-"",
-"Swing either way and commit completely. A magnificent pick gets a rapturous,",
-"unhinged, arms-in-the-air celebration. A terrible one gets buried and then",
-"buried again. Do NOT manufacture a flaw in a good pick because you have been let",
-"off the leash: an ecstatic rave about a boring correct pick is funnier than a",
-"forced roast and far funnier than a lukewarm one.",
-"",
-"ABOUT " + pk.w.toUpperCase() + ", true and fair game tonight: " + fact + ".",
-"USE THIS. It is the reason this mode exists. Work it in and lean on it. Skip it",
-"only if the pick itself is genuinely the better joke, which is rare.",
-"",
-"WHAT DOES NOT CHANGE, AND MATTERS MORE HERE THAN ANYWHERE:",
-"- Invent nothing. No draft history you were not handed, no statistic you were",
-"  not given, no championship, no year, no number. Volume sells an error, so a",
-"  wrong fact delivered like this is the worst thing you can put on that screen.",
-"  If you are reaching for a fact, write about tonight instead.",
-"- Jokes land on picks, rosters, draft habits, results and league money. Never on",
-"  anyone's appearance, family, job, health, real finances, intelligence or",
-"  character. The fact given above is a licence for THAT ONE FACT and nothing",
-"  else; it is not permission for personal comedy generally.",
-"- Nothing sexual about any real player or any owner. Ridicule the decision.",
-"- Still third person. Still never address the room. Still never show the math.",
-"",
-"Return only the commentary."
-  ].join("\n");
-}
-
 /** Ask Sonnet. Resolves to a string, or null if anything at all goes wrong. */
-async function askWire(overall, hot) {
+async function askWire(overall) {
   const key = apiKey();
   if (!key) return null;
   const facts = pickFacts(overall);
   if (!facts) return null;
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), hot ? WIRE_TIMEOUT_HOT : WIRE_TIMEOUT);
+  const timer = setTimeout(() => ctl.abort(), WIRE_TIMEOUT);
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1785,16 +1631,9 @@ async function askWire(overall, hot) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: hot ? 320 : 180,
-        /* The base prompt stays a separate, unchanged block so it keeps its cache
-           hit; the unleashed text rides after it rather than replacing it. That
-           also means every guardrail in the base prompt still applies. */
-        system: hot
-          ? [{ type: "text", text: systemPrompt(),
-               cache_control: { type: "ephemeral", ttl: "1h" } },
-             { type: "text", text: unleashedBlock(overall) }]
-          : [{ type: "text", text: systemPrompt(),
-               cache_control: { type: "ephemeral", ttl: "1h" } }],
+        max_tokens: 180,
+        system: [{ type: "text", text: systemPrompt(),
+                   cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages: [{ role: "user", content: facts }]
       })
     });
@@ -1860,40 +1699,17 @@ async function runWire(overall, force) {
      line is on screen this instant -- so the dwell starts now rather than never.
      Missing these is how a face gets stranded on the pick until someone notices. */
   const gen = faceGen;                     // captured before any await
-  ensureUnleashedPlan();
-  const hot = isUnleashed(overall);
   if (ST.mute) { armRoomTimer(overall, gen); return; }
   if (!force && ST.wire && ST.wire[overall]) { armRoomTimer(overall, gen); return; }
   wireBusy = true;
   ST.pending = overall;          // tells Broadcast that a second pass is coming
   save(true);
   render();
-  let txt = await askWire(overall, hot);
-  /* A dead unleashed call should not also cost the live line. The slot moves on
-     via hotSkip either way; retrying once WITHOUT the hot block gets a normal
-     two-sentence line back inside the tight budget, so the room sees something
-     real rather than the canned fallback. */
-  if (!txt && hot) txt = await askWire(overall, false);
+  const txt = await askWire(overall);
   wireBusy = false;
   if (ST.pending === overall) delete ST.pending;
   ST.wire = ST.wire || {};
   if (txt) ST.wire[overall] = txt;
-  /* The red box fires on a LIVE line only. A failed call must not wrap a banner
-     round the written fallback -- a loud red frame with a limp canned line in it
-     is worse than no red frame at all. On failure the slot moves to the next
-     pick in the round instead of being lost. */
-  if (hot) {
-    if (txt) {
-      ST.hot = ST.hot || {}; ST.hot[overall] = true;
-      ST.hotRound = ST.hotRound || {};
-      ST.hotRound[DATA.picks.find(x => x.o === overall).r] = overall;
-    } else {
-      const r = DATA.picks.find(x => x.o === overall).r;
-      ST.hotSkip = ST.hotSkip || {};
-      ST.hotSkip[r] = (ST.hotSkip[r] || 0) + 1;
-      ST.hotFail = (ST.hotFail || 0) + 1;   // surfaced in the Command diagnostics
-    }
-  }
   save(true);
   render();
   /* Settled either way: a live line arrived, or the call failed and the written
@@ -2273,7 +2089,18 @@ function recapHTML() {
    Broadcast once: an edit matched two copies of a line when only one of them was
    meant to change. Two copies also drift apart under later edits. */
 function bestAvailHTML() {
-  return '<div class="card"><h2>Best available \u00b7 consensus board</h2><div class="row">'
+  /* The count of picks this list reflects, printed on the list itself.
+     A frozen panel and a correct one look identical when the next few picks
+     happen to fall outside the top sixteen by ADP -- which is common in a
+     touchdown-only room, where goal-line backs and kickers go early relative to
+     the market. Without a stamp there is no way to tell "nothing changed because
+     nothing should have" from "this window stopped receiving state". With it,
+     the number stops advancing the moment the panel goes stale, and the room can
+     see that at a glance. */
+  const made = Object.keys(ST.made).length;
+  return '<div class="card"><h2>Best available \u00b7 consensus board'
+    + '<span class="asof">after ' + made + ' pick' + (made === 1 ? "" : "s")
+    + "</span></h2><div class=\"row\">"
     + consensusAvail(16).map(p => '<span class="tag">' + posChip(p.p) + " "
       + esc(p.n) + "</span>").join("") + "</div></div>";
 }
@@ -2366,15 +2193,8 @@ function broadcastView() {
   const cm = last === null ? null : commentary(last);
   const wr = last === null ? null : wireFor(last);
   const waiting = wr && !wr.live && ST.pending === last;
-  /* Hot only when a live line actually arrived: ST.hot is written after the
-     response, never before, so the red frame can never wrap a fallback. */
-  const hot = last !== null && ST.hot && ST.hot[last] && wr && wr.live;
-  const flame = '<span class="flame">\ud83d\udd25</span>';
-  h += '<div class="card' + (hot ? " hot" : "") + '"><h2 class="'
-    + (hot ? "hHot" : wr && wr.live ? "hAI" : "hInstant") + '">'
-    + (hot ? flame + " AI UNLEASHED "
-        + flame.replace('class="flame"', 'class="flame b"')
-      : last === null ? "The wire" : wr && wr.live ? "AI insights" : "Instant analysis")
+  h += '<div class="card"><h2 class="' + (wr && wr.live ? "hAI" : "hInstant") + '">'
+    + (last === null ? "The wire" : wr && wr.live ? "AI insights" : "Instant analysis")
     + (waiting ? '<span class="incoming">AI insights incoming\u2026</span>' : "") + "</h2>"
     + (wr ? '<div class="say' + (wr.live ? " ai" : "") + '"><span id="saytext">'
         + esc(typeState.key === "w" + last && !typeState.done ? typeState.shown : wr.text)
@@ -3104,8 +2924,7 @@ function commandView() {
     + (stale.length ? stale.length + " stale message(s) ignored · " : "")
     + Object.keys(ST.made).length + " picks recorded, "
     + Object.keys(ST.wire || {}).length + " live lines saved. Cleared when you clear the draft."
-    + (ST.hotFail ? " \u00b7 " + ST.hotFail + " unleashed call"
-        + (ST.hotFail === 1 ? "" : "s") + " failed or timed out" : "")
+
     + "</div>"
     + "</div>";
   h += '<div class="split3">';
@@ -3350,7 +3169,6 @@ computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail, render,
                  face: () => ST.face, setFace: v => { ST.face = v; save(true); render(); },
-                 isUnleashed, unleashedTarget, buildUnleashedPlan, ensureUnleashedPlan, unleashedBlock, OWNER_FACTS,
                  dwell: v => { if (v !== undefined) ROOM_DWELL = v; return ROOM_DWELL; },
                  armRoomTimer, clearRoomTimer, roomTimerPending: () => roomTimer !== null,
                  bigBoardHTML, tiersOf,
