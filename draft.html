@@ -266,7 +266,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v2.19 · 4 Sep</span>
+  <span class="ver">v2.21 · 4 Sep</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <button id="roomflip" class="flip" style="display:none">Room screen</button>
@@ -279,7 +279,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v2.19/0904-1926";
+const BUILD = "v2.21/0904-2307";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -1653,10 +1653,52 @@ let wireErr = "";
 let wireBusy = false;
 
 /** Fetch commentary for a pick and put it in shared state so Broadcast sees it. */
+/* The room screen returns to the board on its own once the insight has been
+   read. The clock is anchored to the insight SETTLING, not to the pick landing:
+   the wire call can take seconds or time out, and a timer started at commit can
+   expire while the box is still empty, flipping away from a line nobody saw.
+
+   Command owns the clock. Broadcast must never run one of its own -- both
+   windows firing independent timers means two writers racing on ST.face, and the
+   room screen flickers between faces with nobody touching anything. */
+let ROOM_DWELL = 60000;
+let roomTimer = null;
+/* Bumped every time a human moves the face. runWire captures it before awaiting
+   and the arm refuses if it changed underneath: the wire call is async, so an
+   operator who commits a pick and immediately hits the button would otherwise
+   clear a timer that has not been set yet, and the arm would land afterwards and
+   flip the room screen a minute later with nobody having touched anything. */
+let faceGen = 0;
+
+function clearRoomTimer() {
+  if (roomTimer) { clearTimeout(roomTimer); roomTimer = null; }
+  faceGen++;
+}
+
+function armRoomTimer(overall, gen) {
+  if (gen !== undefined && gen !== faceGen) return;   // a hand got here first
+  clearRoomTimer();                        // a newer pick cancels the old clock
+  faceGen--;                               // ...but this arm is not a hand
+  if (VIEW !== "command") return;
+  if (ST.face !== "pick") return;          // already on the board; nothing to do
+  roomTimer = setTimeout(() => {
+    roomTimer = null;
+    if (ST.face !== "pick") return;        // the operator got there first
+    if (lastPickSeen !== overall) return;  // a newer pick owns the screen now
+    ST.face = "board";
+    save(true);
+    render();
+  }, ROOM_DWELL);
+}
+
 async function runWire(overall, force) {
   if (VIEW !== "command") return;          // only the key holder calls out
-  if (ST.mute) return;
-  if (!force && ST.wire && ST.wire[overall]) return;
+  /* Muted and cached both mean the insight is already settled -- the written
+     line is on screen this instant -- so the dwell starts now rather than never.
+     Missing these is how a face gets stranded on the pick until someone notices. */
+  const gen = faceGen;                     // captured before any await
+  if (ST.mute) { armRoomTimer(overall, gen); return; }
+  if (!force && ST.wire && ST.wire[overall]) { armRoomTimer(overall, gen); return; }
   wireBusy = true;
   ST.pending = overall;          // tells Broadcast that a second pass is coming
   save(true);
@@ -1668,6 +1710,9 @@ async function runWire(overall, force) {
   if (txt) ST.wire[overall] = txt;
   save(true);
   render();
+  /* Settled either way: a live line arrived, or the call failed and the written
+     fallback is what the room is reading. Both are done being read from. */
+  armRoomTimer(overall, gen);
 }
 
 /** What Broadcast shows: the live line if it arrived, else the written one. */
@@ -1786,6 +1831,7 @@ function undo() {
   if (!done.length) return;
   delete ST.made[done[done.length - 1]];
   ST.face = "board";     // the hero would otherwise describe a pick just erased
+  clearRoomTimer();
   save(true);
   render();
 }
@@ -3048,7 +3094,7 @@ function fnv(s) {
    keyed on the passphrase that opens Command — so it decodes at the gate and
    nowhere else. Not real cryptography; it does not need to be. It needs to
    survive somebody opening view-source out of curiosity. */
-const TARGETSEED = "4Dl6FX3AfLJ3X8eeIBi2nhW1jEt0FhCqTDR/EsIs9cvRQcPsnn8UOVD9EnY7q4o4iec+yecYZpyXOqjoHQtN4FzbFxSJKvyGr5foMy3t1fM2MlAQG5ZZ8OUdW0AMyH8Apbb/eyesyTAQte99RgpdmvS/ryiKFP+TkRz8qjZeJOGv5iXYlz3dy/+H1M589WcNeDvv5MFeOJpLb849+jOoSCANvYB78ncPXw==";
+const TARGETSEED = "4Dl6FX3AfLJ3X9eJKhS20T/noE5NXVDkeT8pX4kc6M+Ub8WBv3IUNBzzHBcWtZwphew+zekCb9LadpizXUxrsm7MChTMCL/d/7HpPDu7lr9EEVIDXrVc6+9FEkByhV4E4Z27QyqVw3xX8tw+Dkllkuy96hbYKv2S11y7wnUOFPmtoxqZszPBm7bLvIMnzXcAMwn8oO5APN4Tb65+1DbsZDEns4Awx3xEYW1WgpKXjb1C0Z4InCGcBkGdsW8Exjt4rB6kGDXfrAZvfUfS3kHyV2gxcAd2v7czu7rEYxrjy3BlCAYLF/JH56dpA8+EPV9nYzDGZ4N6yY7vjRWBXHUCJHMoike1nSX+5BrtyeOf0P3JK384h8D6VhrsaAURm3w3ZNDXOmMvrhHFdR0eGkr0oOsjLrj2wiaVPwuLa0mZ/J0hff3olddlr4j2u7nsNJT47pYKIJIaSDQyUEL+Sh651bKuNdQpT1mKPjGILzXWao2WVa0lsPb8AbIFBRFMLy3ztORxGnD/YhHh3Q/Fyc05rs+q6sR41EZhXaeVQ14+zwmxEn6ukoahs3HeFUAsZi1THJL/HwrKLSJHdn0qM2/Hz2+5Jsj08hIm2aZCj73929pTzNsDfC875HV7MaEz7Pqk3sR9MUg6Ik9Z8BZCHHJ8";
 function keystream(pass) {
   let h = 0x811c9dc5;
   for (let i = 0; i < pass.length; i++) { h ^= pass.charCodeAt(i); h = Math.imul(h, 0x01000193); }
@@ -3096,6 +3142,7 @@ document.getElementById("flip").onclick = () => {
    keyboard mid-draft, so the flip is pushed from here over the state channel
    that already carries picks. Wired once: the bar is outside app.innerHTML. */
 document.getElementById("roomflip").onclick = () => {
+  clearRoomTimer();          // the hand overrides the clock, in both directions
   ST.face = ST.face === "pick" ? "board" : "pick";
   save(true);
   render();
@@ -3108,6 +3155,8 @@ computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail, render,
                  face: () => ST.face, setFace: v => { ST.face = v; save(true); render(); },
+                 dwell: v => { if (v !== undefined) ROOM_DWELL = v; return ROOM_DWELL; },
+                 armRoomTimer, clearRoomTimer, roomTimerPending: () => roomTimer !== null,
                  bigBoardHTML, tiersOf,
                  DATA, BY, KEPT, ST, triviaFor, marketSlot, shortName, urgencyOf, expectedBestAt, survivesTo, expectedBoard, moneyline, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, deepCut, sampleSequence, sampleRosters, applyTrades, parseTrade, tradeTrouble, commitTrade, undoTrade, tradeImbalance, tradeLine, countsWith, PICK_QUOTA, pickLabel, pickBoth, parsePickRef, RP, RPTO,
   setTradeDraft: (t, n) => { tradeDraft = t; tradeNote = n || ""; tradeArmed = false; },
