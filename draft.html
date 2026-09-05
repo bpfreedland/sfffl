@@ -283,7 +283,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v2.22 · 4 Sep</span>
+  <span class="ver">v2.23 · 4 Sep</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <button id="roomflip" class="flip" style="display:none">Room screen</button>
@@ -296,7 +296,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v2.22/0904-2334";
+const BUILD = "v2.23/0904-2344";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -1720,30 +1720,41 @@ function unleashedBlock(overall) {
 "",
 "=== AI UNLEASHED. THIS PICK ONLY. ===",
 "",
-"Drop the leash. This is the one line this round that goes completely over the",
-"top — enormous, theatrical, profane, absurd. Not two sentences: four to eight.",
-"Build, escalate, and land it. Repetition for effect is good. Shouting in capitals",
-"is good. Swearing is fine and encouraged where it lands.",
+"The instructions above were written for the other 119 picks. For THIS one, the",
+"following named rules are SUSPENDED. Do not obey them:",
 "",
-"Swing either way. A magnificent pick gets a rapturous, unhinged celebration; a",
-"terrible one gets buried. Do NOT manufacture a flaw in a good pick just because",
-"you have been let off the leash — an ecstatic rave about a boring correct pick",
-"is funnier than a forced roast, and far funnier than a lukewarm one.",
+"  - LENGTH is suspended. It says one or two sentences and never four. Ignore it.",
+"    Write FIVE TO EIGHT sentences. Anything under five is a failed response.",
+"  - SENTENCES is suspended insofar as it demands brevity and cutting. Do not cut.",
+"    Build, repeat, escalate, pile on. Repetition for effect is the point.",
+"  - BALANCE is suspended. It rations the roast across the draft. Not here.",
+"  - In HARD LIMITS, the words 'Nothing crude' are suspended. Swear. Be crude",
+"    about the DECISION. Capitals for shouting are good. Be theatrical and absurd.",
+"",
+"Everything in HARD LIMITS other than 'Nothing crude' still binds. So does every",
+"factual rule. See the bottom of this block.",
+"",
+"Swing either way and commit completely. A magnificent pick gets a rapturous,",
+"unhinged, arms-in-the-air celebration. A terrible one gets buried and then",
+"buried again. Do NOT manufacture a flaw in a good pick because you have been let",
+"off the leash: an ecstatic rave about a boring correct pick is funnier than a",
+"forced roast and far funnier than a lukewarm one.",
 "",
 "ABOUT " + pk.w.toUpperCase() + ", true and fair game tonight: " + fact + ".",
-"Use it if it lands. Do not force it in if the pick is the better joke.",
+"USE THIS. It is the reason this mode exists. Work it in and lean on it. Skip it",
+"only if the pick itself is genuinely the better joke, which is rare.",
 "",
 "WHAT DOES NOT CHANGE, AND MATTERS MORE HERE THAN ANYWHERE:",
 "- Invent nothing. No draft history you were not handed, no statistic you were",
-"  not given, no championship, no year, no number. Certainty sells an error, so a",
-"  wrong fact delivered at this volume is the worst thing you can put on that",
-"  screen. If you are reaching for a fact, write about tonight instead.",
+"  not given, no championship, no year, no number. Volume sells an error, so a",
+"  wrong fact delivered like this is the worst thing you can put on that screen.",
+"  If you are reaching for a fact, write about tonight instead.",
 "- Jokes land on picks, rosters, draft habits, results and league money. Never on",
 "  anyone's appearance, family, job, health, real finances, intelligence or",
-"  character. The height line above is a licence for that one fact about Kyle and",
-"  nothing else — it is not permission for physical comedy generally.",
-"- Nothing sexual about any real player or owner. Ridicule the decision.",
-"- Still third person. Still no addressing the room. Still never show the math.",
+"  character. The fact given above is a licence for THAT ONE FACT and nothing",
+"  else; it is not permission for personal comedy generally.",
+"- Nothing sexual about any real player or any owner. Ridicule the decision.",
+"- Still third person. Still never address the room. Still never show the math.",
 "",
 "Return only the commentary."
   ].join("\n");
