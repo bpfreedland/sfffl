@@ -19,6 +19,10 @@
 *{box-sizing:border-box}
 body{margin:0;font:15px/1.45 var(--body);background:var(--parch);color:var(--navy)}
 body.bcast{background:var(--deep);color:var(--parch)}
+.clockbar{display:flex;align-items:baseline;gap:12px;padding:10px 16px}
+.clockbar .clockname{font-size:30px}
+.clockbar .cbmeta{color:var(--dim);font-size:15px}
+@media(max-width:820px){.clockbar .clockname{font-size:22px}}
 .bar{display:flex;align-items:baseline;gap:14px;padding:9px 20px;
   background:var(--navy);color:var(--parch);border-bottom:2px solid var(--gold)}
 .bar b{font:700 20px/1 var(--disp);letter-spacing:.06em;text-transform:uppercase}
@@ -262,9 +266,10 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v2.18 · 4 Sep</span>
+  <span class="ver">v2.19 · 4 Sep</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
+  <button id="roomflip" class="flip" style="display:none">Room screen</button>
   <span class="sp" id="sync">·</span>
 </div>
 <div class="wrap" id="app"></div>
@@ -274,14 +279,14 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v2.18/0904-1547";
+const BUILD = "v2.19/0904-1926";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
    made: pick overall number -> player name. That is the entire draft.
    Everything else (rosters, best available, grades) is derived, so there is
    no second copy to fall out of step. */
-let ST = { made: {}, targets: {}, note: {} };
+let ST = { made: {}, targets: {}, note: {}, face: "board" };
 let VIEW = new URLSearchParams(location.search).get("view") === "command"
   ? "command" : "broadcast";
 let unlocked = false;
@@ -1764,6 +1769,10 @@ function commit(name, force) {
   blockMsg = "";
   ST.made[pk.o] = name;
   lastPickSeen = pk.o;
+  /* The pick is the moment worth watching, so the room screen comes to it on its
+     own; flipping back to the board is the manual half. The reverse default --
+     staying put and reaching for the button on every pick -- is 120 presses. */
+  ST.face = "pick";
   q = ""; cursor = 0;
   save(true);
   render();
@@ -1776,6 +1785,7 @@ function undo() {
   const done = Object.keys(ST.made).map(Number).sort((a,b) => a-b);
   if (!done.length) return;
   delete ST.made[done[done.length - 1]];
+  ST.face = "board";     // the hero would otherwise describe a pick just erased
   save(true);
   render();
 }
@@ -2026,11 +2036,67 @@ function recapHTML() {
   return recapBlock(r, false) + (r > 1 ? recapBlock(r - 1, true) : "");
 }
 
-function broadcastView() {
+/* The consensus best-available strip. ONE definition, called from both faces.
+   Duplicating this markup is the precise mechanism that put the big board into
+   Broadcast once: an edit matched two copies of a line when only one of them was
+   meant to change. Two copies also drift apart under later edits. */
+function bestAvailHTML() {
+  return '<div class="card"><h2>Best available \u00b7 consensus board</h2><div class="row">'
+    + consensusAvail(16).map(p => '<span class="tag">' + posChip(p.p) + " "
+      + esc(p.n) + "</span>").join("") + "</div></div>";
+}
+
+/* Who is on the clock, compressed to one line. The full hero card lives only on
+   the pick face, but a remote owner watching the board face still has to know it
+   is his turn -- being able to sit on the board between picks is the entire
+   reason that face exists, and it is worthless if it hides the clock. */
+function clockBarHTML() {
   const pk = onClock();
+  return '<div class="card clockbar">'
+    + (pk ? '<span class="clockname">' + esc(DATA.teamName[pk.w] || pk.w) + "</span>"
+        + '<span class="cbmeta">on the clock \u00b7 round ' + pk.r
+        + " \u00b7 pick " + pk.o + " of 120</span>"
+      : '<span class="clockname">Draft complete</span>')
+    + "</div>";
+}
+
+/* Broadcast is two faces and Command decides which one the room screen shows.
+   The whole page never fit a Zoom share at a legible size: legibility is the
+   fraction of the frame a glyph occupies, so zooming out to fit more content
+   defeats itself. Showing less at a time is the only lever, and splitting the
+   page trades time for space -- the only currency left once pixels are fixed.
+
+   ST.face carries the choice. It rides in state rather than in its own channel
+   message because the channel is the path that silently drops messages when a
+   tab backgrounds, while resync() always reads state back out of localStorage.
+   A face in state survives a reload and a dropped message for free. The cost is
+   that a display toggle bumps ST.rev, so the revision counter now advances on
+   events that are not picks. */
+function broadcastView() {
   const done = Object.keys(ST.made).map(Number).sort((a, b) => a - b);
   const last = done.length ? done[done.length - 1] : null;
+  const face = ST.face === "pick" ? "pick" : "board";
   let h = "";
+
+  if (face === "board") {
+    h += clockBarHTML();
+    h += bestAvailHTML();
+    /* NO big board here, on EITHER face. It carries my value-over-replacement
+       ordering, survival percentages to my next pick, the leap flags and my
+       target/avoid marks -- the whole private board. It reached this view once
+       because the edit that added it to Command replaced both matches of the
+       same line, and the board tests only ever looked at Command. Broadcast gets
+       the consensus list and the pick grid, which is what the room already
+       knows. There are now two faces to leak through and both are asserted. */
+    h += '<div class="card"><h2>Board</h2>' + gridHTML() + "</div>";
+    /* Trades are public: the room watched them happen and the grid already shows
+       the new owner in the slot. This just says it in words. Nothing private is
+       in here -- pick numbers, owner names, and a note I typed for the room. */
+    h += tradeCardHTMLBcast();
+    return h;
+  }
+
+  const pk = onClock();
 
   h += '<div class="hero">';
   if (last !== null) {
@@ -2080,21 +2146,7 @@ function broadcastView() {
         + "and the first pick of the draft is on the clock.</div>")
     + "</div>";
   h += "</div>";
-
-  h += '<div class="card"><h2>Best available · consensus board</h2><div class="row">'
-    + consensusAvail(16).map(p => '<span class="tag">' + posChip(p.p) + " "
-      + esc(p.n) + "</span>").join("") + "</div></div>";
-  /* NO big board here. It carries my value-over-replacement ordering, survival
-     percentages to my next pick, the leap flags and my target/avoid marks -- the
-     whole private board. It reached this view because the edit that added it to
-     Command replaced both matches of the same line, and the board tests only ever
-     looked at Command. Broadcast gets the consensus list and the pick grid, which
-     is what the room already knows. */
-  h += '<div class="card"><h2>Board</h2>' + gridHTML() + "</div>";
-  /* Trades are public: the room watched them happen and the grid already shows
-     the new owner in the slot. This just says it in words. Nothing private is in
-     here -- pick numbers, owner names, and a note I typed for the room. */
-  h += tradeCardHTMLBcast();
+  h += bestAvailHTML();
   return h;
 }
 
@@ -2829,6 +2881,11 @@ function render() {
   applyTrades();
   document.getElementById("viewname").textContent =
     VIEW === "command" ? "Command" : "Broadcast";
+  const rf = document.getElementById("roomflip");
+  if (rf) {
+    rf.style.display = VIEW === "command" && unlocked ? "" : "none";
+    rf.textContent = ST.face === "pick" ? "Room \u2192 board" : "Room \u2192 pick";
+  }
   const app = document.getElementById("app");
   if (VIEW === "command" && !unlocked) {
     app.innerHTML = '<div class="gate card"><h2>Command board</h2>'
@@ -2964,7 +3021,7 @@ function wireCommand() {
       + "Download the transcript first if you want to keep it.")) return;
     // trades survive a clear: they are things that actually happened in the room,
     // not draft progress being re-run
-    ST = { made: {}, targets: ST.targets, trades: ST.trades, note: {}, wire: {}, custom: {}, recap: {} };
+    ST = { made: {}, targets: ST.targets, trades: ST.trades, note: {}, wire: {}, custom: {}, recap: {}, face: "board" };
     RIBBON = [];
     stopTyping(); typeState = { key: "", full: "", shown: "", timer: null, done: true };
     save(true); render(); computeOdds(render);
@@ -3034,12 +3091,23 @@ document.getElementById("flip").onclick = () => {
   location.search = "?view=" + v;
 };
 
+/* The room screen hangs on the external monitor; this machine is driving
+   Command. A control on Broadcast itself would mean reaching for the wrong
+   keyboard mid-draft, so the flip is pushed from here over the state channel
+   that already carries picks. Wired once: the bar is outside app.innerHTML. */
+document.getElementById("roomflip").onclick = () => {
+  ST.face = ST.face === "pick" ? "board" : "pick";
+  save(true);
+  render();
+};
+
 buildShortNames();
 load();
 render();
 computeOdds(render);
 window.SFFFL = { commit, undo, onClock, state: () => ST, setView: v => { VIEW = v; render(); },
                  unlock: () => { unlocked = true; render(); }, load, taken, delta, bestAvail, render,
+                 face: () => ST.face, setFace: v => { ST.face = v; save(true); render(); },
                  bigBoardHTML, tiersOf,
                  DATA, BY, KEPT, ST, triviaFor, marketSlot, shortName, urgencyOf, expectedBestAt, survivesTo, expectedBoard, moneyline, adopt, staleLog: () => stale, BUILD, lastCompleteRound, roundExtremes, recapFor, recapHTML, recapBlock, illegalReason, consensusAvail, buildTranscript, addCustom, draftable, pickFacts, systemPrompt, deepCut, sampleSequence, sampleRosters, applyTrades, parseTrade, tradeTrouble, commitTrade, undoTrade, tradeImbalance, tradeLine, countsWith, PICK_QUOTA, pickLabel, pickBoth, parsePickRef, RP, RPTO,
   setTradeDraft: (t, n) => { tradeDraft = t; tradeNote = n || ""; tradeArmed = false; },
