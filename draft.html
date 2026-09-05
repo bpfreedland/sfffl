@@ -283,7 +283,7 @@ td.dl{text-align:right;width:74px;font-size:15px}
 <body>
 <div class="bar">
   <b>SFFFL 2026</b>
-  <span class="ver">v2.23 · 4 Sep</span>
+  <span class="ver">v2.24 · 4 Sep</span>
   <span id="viewname"></span>
   <button id="flip" class="flip">Switch view</button>
   <button id="roomflip" class="flip" style="display:none">Room screen</button>
@@ -296,7 +296,7 @@ const DATA = {"players":[{"n":"Jonathan Taylor","p":"RB","t":"IND","adp":8,"pts"
 const BY = {}; DATA.players.forEach(p => BY[p.n] = p);
 const POS = ["QB","RB","WR","TE","K"];
 const KEY = "sfffl-draft-2026";
-const BUILD = "v2.23/0904-2344";
+const BUILD = "v2.24/0904-2359";
 const CH = "sfffl-draft";
 
 /* ---------------------------------------------------------------- state
@@ -1060,6 +1060,11 @@ function ownerCountsAll(pos) {
 const AKEY = "sfffl-api-key";
 const MODEL = "claude-sonnet-4-6";
 const WIRE_TIMEOUT = 9000;
+/* An unleashed line is five to eight sentences against a 320-token ceiling. That
+   is four to six seconds of generation before time-to-first-token and network,
+   which sits right on the 9s budget a two-sentence line never came close to.
+   v2.23 aborted mid-response and showed nothing at all. Hot picks get room. */
+const WIRE_TIMEOUT_HOT = 30000;
 
 function apiKey() { try { return localStorage.getItem(AKEY) || ""; } catch (e) { return ""; } }
 function setApiKey(k) {
@@ -1767,7 +1772,7 @@ async function askWire(overall, hot) {
   const facts = pickFacts(overall);
   if (!facts) return null;
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), WIRE_TIMEOUT);
+  const timer = setTimeout(() => ctl.abort(), hot ? WIRE_TIMEOUT_HOT : WIRE_TIMEOUT);
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1863,7 +1868,12 @@ async function runWire(overall, force) {
   ST.pending = overall;          // tells Broadcast that a second pass is coming
   save(true);
   render();
-  const txt = await askWire(overall, hot);
+  let txt = await askWire(overall, hot);
+  /* A dead unleashed call should not also cost the live line. The slot moves on
+     via hotSkip either way; retrying once WITHOUT the hot block gets a normal
+     two-sentence line back inside the tight budget, so the room sees something
+     real rather than the canned fallback. */
+  if (!txt && hot) txt = await askWire(overall, false);
   wireBusy = false;
   if (ST.pending === overall) delete ST.pending;
   ST.wire = ST.wire || {};
@@ -1881,6 +1891,7 @@ async function runWire(overall, force) {
       const r = DATA.picks.find(x => x.o === overall).r;
       ST.hotSkip = ST.hotSkip || {};
       ST.hotSkip[r] = (ST.hotSkip[r] || 0) + 1;
+      ST.hotFail = (ST.hotFail || 0) + 1;   // surfaced in the Command diagnostics
     }
   }
   save(true);
@@ -3093,6 +3104,8 @@ function commandView() {
     + (stale.length ? stale.length + " stale message(s) ignored · " : "")
     + Object.keys(ST.made).length + " picks recorded, "
     + Object.keys(ST.wire || {}).length + " live lines saved. Cleared when you clear the draft."
+    + (ST.hotFail ? " \u00b7 " + ST.hotFail + " unleashed call"
+        + (ST.hotFail === 1 ? "" : "s") + " failed or timed out" : "")
     + "</div>"
     + "</div>";
   h += '<div class="split3">';
